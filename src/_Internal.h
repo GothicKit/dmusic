@@ -332,6 +332,7 @@ DMINT DmResult DmLoader_getDownloadableSound(DmLoader* slf, DmReference const* r
 DMINT DmResult DmSegment_create(DmSegment** slf);
 DMINT DmResult DmSegment_parse(DmSegment* slf, void* buf, size_t len);
 
+DMINT void DmMessage_copy(DmMessage* slf, DmMessage* cpy);
 DMINT void DmMessage_free(DmMessage* slf);
 
 DMINT DmResult DmBand_create(DmBand** slf);
