@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT-Modern-Variant
 #include "_Internal.h"
 
-static void DmPartReference_parse(DmPartReference* slf, DmRiff* rif) {
+static void DmStyle_parsePartReference(DmPartReference* slf, DmRiff* rif) {
 	DmRiff cnk;
 	while (DmRiff_readChunk(rif, &cnk)) {
 		if (DmRiff_is(&cnk, DM_FOURCC_PRFC, 0)) {
@@ -20,7 +20,7 @@ static void DmPartReference_parse(DmPartReference* slf, DmRiff* rif) {
 	}
 }
 
-static DmResult DmPattern_parse(DmPattern* slf, DmRiff* rif) {
+static DmResult DmStyle_parsePattern(DmPattern* slf, DmRiff* rif) {
 	DmRiff cnk;
 	while (DmRiff_readChunk(rif, &cnk)) {
 		if (DmRiff_is(&cnk, DM_FOURCC_PTNH, 0)) {
@@ -34,6 +34,9 @@ static DmResult DmPattern_parse(DmPattern* slf, DmRiff* rif) {
 		} else if (DmRiff_is(&cnk, DM_FOURCC_RHTM, 0)) {
 			slf->rhythm_len = cnk.len / 4;
 			slf->rhythm = Dm_alloc(cnk.len);
+			if (slf->rhythm == NULL) {
+				return DmResult_MEMORY_EXHAUSTED;
+			}
 
 			for (size_t i = 0; i < slf->rhythm_len; ++i) {
 				DmRiff_readDword(&cnk, &slf->rhythm[i]);
@@ -41,7 +44,7 @@ static DmResult DmPattern_parse(DmPattern* slf, DmRiff* rif) {
 		} else if (DmRiff_is(&cnk, DM_FOURCC_LIST, DM_FOURCC_PREF)) {
 			DmPartReference pref;
 			DmPartReference_init(&pref);
-			DmPartReference_parse(&pref, &cnk);
+			DmStyle_parsePartReference(&pref, &cnk);
 
 			DmResult rv = DmPartReferenceList_add(&slf->parts, pref);
 			if (rv != DmResult_SUCCESS) {
@@ -55,7 +58,7 @@ static DmResult DmPattern_parse(DmPattern* slf, DmRiff* rif) {
 	return DmResult_SUCCESS;
 }
 
-static DmResult DmNoteList_parse(DmPart* part, DmRiff* rif) {
+static DmResult DmStyle_parsePartNotes(DmPart* part, DmRiff* rif) {
 	uint32_t item_size = 0;
 	DmRiff_readDword(rif, &item_size);
 
@@ -90,7 +93,7 @@ static DmResult DmNoteList_parse(DmPart* part, DmRiff* rif) {
 	return DmResult_SUCCESS;
 }
 
-static DmResult DmPart_parse(DmPart* slf, DmRiff* rif) {
+static DmResult DmStyle_parsePart(DmPart* slf, DmRiff* rif) {
 	DmRiff cnk;
 	while (DmRiff_readChunk(rif, &cnk)) {
 		if (DmRiff_is(&cnk, DM_FOURCC_PRTH, 0)) {
@@ -113,7 +116,7 @@ static DmResult DmPart_parse(DmPart* slf, DmRiff* rif) {
 		} else if (DmRiff_is(&cnk, DM_FOURCC_LIST, DM_FOURCC_UNFO)) {
 			DmUnfo_parse(&slf->info, &cnk);
 		} else if (DmRiff_is(&cnk, DM_FOURCC_NOTE, 0)) {
-			DmResult rv = DmNoteList_parse(slf, &cnk);
+			DmResult rv = DmStyle_parsePartNotes(slf, &cnk);
 			if (rv != DmResult_SUCCESS) {
 				return rv;
 			}
@@ -163,7 +166,7 @@ DmResult DmStyle_parse(DmStyle* slf, void* buf, size_t len) {
 			DmPart part;
 			DmPart_init(&part);
 
-			DmResult rv = DmPart_parse(&part, &cnk);
+			DmResult rv = DmStyle_parsePart(&part, &cnk);
 			if (rv != DmResult_SUCCESS) {
 				DmPart_free(&part);
 				return rv;
@@ -177,7 +180,7 @@ DmResult DmStyle_parse(DmStyle* slf, void* buf, size_t len) {
 			DmPattern pttn;
 			DmPattern_init(&pttn);
 
-			DmResult rv = DmPattern_parse(&pttn, &cnk);
+			DmResult rv = DmStyle_parsePattern(&pttn, &cnk);
 			if (rv != DmResult_SUCCESS) {
 				DmPattern_free(&pttn);
 				return rv;

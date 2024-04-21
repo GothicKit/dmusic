@@ -10,6 +10,7 @@ Checks: >
   -misc-include-cleaner,
   -altera-struct-pack-align,
   -altera-unroll-loops,
+  -altera-id-dependent-backward-branch,
   -readability-identifier-length,
   -hicpp-signed-bitwise
 WarningsAsErrors: '*'

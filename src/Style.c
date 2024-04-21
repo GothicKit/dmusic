@@ -115,4 +115,3 @@ void DmPattern_free(DmPattern* slf) {
 	slf->rhythm = NULL;
 	slf->rhythm_len = 0;
 }
-

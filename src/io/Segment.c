@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT-Modern-Variant
 #include "_Internal.h"
 
-static DmResult DmTempoTrack_parse(DmMessageList* slf, DmRiff* rif) {
+static DmResult DmSegment_parseTempoTrack(DmMessageList* slf, DmRiff* rif) {
 	uint32_t item_size = 0;
 	DmRiff_readDword(rif, &item_size);
 
@@ -28,7 +28,7 @@ static DmResult DmTempoTrack_parse(DmMessageList* slf, DmRiff* rif) {
 	return DmResult_SUCCESS;
 }
 
-static void DmCommandItem_parse(DmMessage_Command* slf, DmRiff* rif) {
+static void DmSegment_parseCommandItem(DmMessage_Command* slf, DmRiff* rif) {
 	memset(slf, 0, sizeof *slf);
 	slf->type = DmMessage_COMMAND;
 
@@ -58,7 +58,7 @@ static void DmCommandItem_parse(DmMessage_Command* slf, DmRiff* rif) {
 	}
 }
 
-static DmResult DmCommandTrack_parse(DmMessageList* slf, DmRiff* rif) {
+static DmResult DmSegment_parseCommandTrack(DmMessageList* slf, DmRiff* rif) {
 	uint32_t item_size = 0;
 	DmRiff_readDword(rif, &item_size);
 
@@ -67,7 +67,7 @@ static DmResult DmCommandTrack_parse(DmMessageList* slf, DmRiff* rif) {
 	for (uint32_t i = 0; i < item_count; ++i) {
 		uint32_t end_position = rif->pos + item_size;
 
-		DmCommandItem_parse(&msg.command, rif);
+		DmSegment_parseCommandItem(&msg.command, rif);
 
 		DmResult rv = DmMessageList_add(slf, msg);
 		if (rv != DmResult_SUCCESS) {
@@ -80,7 +80,7 @@ static DmResult DmCommandTrack_parse(DmMessageList* slf, DmRiff* rif) {
 	return DmResult_SUCCESS;
 }
 
-static void DmChord_parse(DmMessage_Chord* slf, DmRiff* rif) {
+static void DmSegment_parseChordItem(DmMessage_Chord* slf, DmRiff* rif) {
 	memset(slf, 0, sizeof *slf);
 	slf->type = DmMessage_CHORD;
 
@@ -131,7 +131,7 @@ static void DmChord_parse(DmMessage_Chord* slf, DmRiff* rif) {
 	}
 }
 
-static DmResult DmChordTrack_parse(DmMessageList* slf, DmRiff* rif) {
+static DmResult DmSegment_parseChordTrack(DmMessageList* slf, DmRiff* rif) {
 	uint32_t crdh = 0;
 
 	DmMessage msg;
@@ -140,7 +140,7 @@ static DmResult DmChordTrack_parse(DmMessageList* slf, DmRiff* rif) {
 		if (DmRiff_is(&cnk, DM_FOURCC_CRDH, 0)) {
 			DmRiff_readDword(&cnk, &crdh);
 		} else if (DmRiff_is(&cnk, DM_FOURCC_CRDB, 0)) {
-			DmChord_parse(&msg.chord, &cnk);
+			DmSegment_parseChordItem(&msg.chord, &cnk);
 
 			DmResult rv = DmMessageList_add(slf, msg);
 			if (rv != DmResult_SUCCESS) {
@@ -154,7 +154,7 @@ static DmResult DmChordTrack_parse(DmMessageList* slf, DmRiff* rif) {
 	return DmResult_SUCCESS;
 }
 
-static DmResult DmBandItem_parse(DmMessage_Band* slf, DmRiff* rif) {
+static DmResult DmSegment_parseBandItem(DmMessage_Band* slf, DmRiff* rif) {
 	memset(slf, 0, sizeof *slf);
 	slf->type = DmMessage_BAND;
 
@@ -177,12 +177,12 @@ static DmResult DmBandItem_parse(DmMessage_Band* slf, DmRiff* rif) {
 	return DmResult_SUCCESS;
 }
 
-static DmResult DmBandList_parse(DmMessageList* slf, DmRiff* rif) {
+static DmResult DmSegment_parseBandList(DmMessageList* slf, DmRiff* rif) {
 	DmMessage msg;
 	DmRiff cnk;
 	while (DmRiff_readChunk(rif, &cnk)) {
 		if (DmRiff_is(&cnk, DM_FOURCC_LIST, DM_FOURCC_LBND)) {
-			DmResult rv = DmBandItem_parse(&msg.band, &cnk);
+			DmResult rv = DmSegment_parseBandItem(&msg.band, &cnk);
 			if (rv != DmResult_SUCCESS) {
 				return rv;
 			}
@@ -200,11 +200,11 @@ static DmResult DmBandList_parse(DmMessageList* slf, DmRiff* rif) {
 }
 
 
-static DmResult DmBandTrack_parse(DmMessageList* slf, DmRiff* rif) {
+static DmResult DmSegment_parseBandTrack(DmMessageList* slf, DmRiff* rif) {
 	DmRiff cnk;
 	while (DmRiff_readChunk(rif, &cnk)) {
 		if (DmRiff_is(&cnk, DM_FOURCC_LIST, DM_FOURCC_LBDL)) {
-			DmResult rv = DmBandList_parse(slf, &cnk);
+			DmResult rv = DmSegment_parseBandList(slf, &cnk);
 			if (rv != DmResult_SUCCESS) {
 				return rv;
 			}
@@ -216,7 +216,7 @@ static DmResult DmBandTrack_parse(DmMessageList* slf, DmRiff* rif) {
 	return DmResult_SUCCESS;
 }
 
-static void DmStyleItem_parse(DmMessage_Style* slf, DmRiff* rif) {
+static void DmSegment_parseStyleItem(DmMessage_Style* slf, DmRiff* rif) {
 	memset(slf, 0, sizeof *slf);
 	slf->type = DmMessage_STYLE;
 
@@ -232,12 +232,12 @@ static void DmStyleItem_parse(DmMessage_Style* slf, DmRiff* rif) {
 	}
 }
 
-static DmResult DmStyleTrack_parse(DmMessageList* slf, DmRiff* rif) {
+static DmResult DmSegment_parseStyleTrack(DmMessageList* slf, DmRiff* rif) {
 	DmMessage msg;
 	DmRiff cnk;
 	while (DmRiff_readChunk(rif, &cnk)) {
 		if (DmRiff_is(&cnk, DM_FOURCC_LIST, DM_FOURCC_STRF)) {
-			DmStyleItem_parse(&msg.style, &cnk);
+			DmSegment_parseStyleItem(&msg.style, &cnk);
 
 			DmResult rv = DmMessageList_add(slf, msg);
 			if (rv != DmResult_SUCCESS) {
@@ -251,7 +251,7 @@ static DmResult DmStyleTrack_parse(DmMessageList* slf, DmRiff* rif) {
 	return DmResult_SUCCESS;
 }
 
-static DmResult DmTrack_parse(DmMessageList* slf, DmRiff* rif) {
+static DmResult DmSegment_parseTrack(DmMessageList* slf, DmRiff* rif) {
 	DmGuid class_id;
 	uint32_t position;
 	uint32_t group;
@@ -268,15 +268,15 @@ static DmResult DmTrack_parse(DmMessageList* slf, DmRiff* rif) {
 			DmRiff_readDword(&cnk, &chunk_id);
 			DmRiff_readDword(&cnk, &chunk_type);
 		} else if (DmRiff_is(&cnk, DM_FOURCC_TETR, 0)) {
-			rv = DmTempoTrack_parse(slf, &cnk);
+			rv = DmSegment_parseTempoTrack(slf, &cnk);
 		} else if (DmRiff_is(&cnk, DM_FOURCC_CMND, 0)) {
-			rv = DmCommandTrack_parse(slf, &cnk);
+			rv = DmSegment_parseCommandTrack(slf, &cnk);
 		} else if (DmRiff_is(&cnk, DM_FOURCC_LIST, DM_FOURCC_CORD)) {
-			rv = DmChordTrack_parse(slf, &cnk);
+			rv = DmSegment_parseChordTrack(slf, &cnk);
 		} else if (DmRiff_is(&cnk, DM_FOURCC_LIST, DM_FOURCC_STTR)) {
-			rv = DmStyleTrack_parse(slf, &cnk);
+			rv = DmSegment_parseStyleTrack(slf, &cnk);
 		} else if (DmRiff_is(&cnk, DM_FOURCC_RIFF, DM_FOURCC_DMBT)) {
-			rv = DmBandTrack_parse(slf, &cnk);
+			rv = DmSegment_parseBandTrack(slf, &cnk);
 		}
 
 		if (rv != DmResult_SUCCESS) {
@@ -289,14 +289,48 @@ static DmResult DmTrack_parse(DmMessageList* slf, DmRiff* rif) {
 	return DmResult_SUCCESS;
 }
 
-DmResult DmTrackList_parse(DmMessageList* slf, DmRiff* rif) {
+static DmResult DmSegment_parseTrackList(DmMessageList* slf, DmRiff* rif) {
 	DmRiff cnk;
 	while (DmRiff_readChunk(rif, &cnk)) {
 		if (DmRiff_is(&cnk, DM_FOURCC_RIFF, DM_FOURCC_DMTK)) {
-			DmResult rv = DmTrack_parse(slf, &cnk);
+			DmResult rv = DmSegment_parseTrack(slf, &cnk);
 			if (rv != DmResult_SUCCESS) {
 				return rv;
 			}
+		}
+
+		DmRiff_reportDone(&cnk);
+	}
+
+	return DmResult_SUCCESS;
+}
+
+DmResult DmSegment_parse(DmSegment* slf, void* buf, size_t len) {
+	DmRiff rif;
+	if (!DmRiff_init(&rif, buf, len)) {
+		Dm_free(buf);
+		return DmResult_FILE_CORRUPT;
+	}
+
+	slf->backing_memory = buf;
+
+	DmRiff cnk;
+	while (DmRiff_readChunk(&rif, &cnk)) {
+		if (DmRiff_is(&cnk, DM_FOURCC_SEGH, 0)) {
+			DmRiff_readDword(&cnk, &slf->repeats);
+			DmRiff_readDword(&cnk, &slf->length);
+			DmRiff_readDword(&cnk, &slf->play_start);
+			DmRiff_readDword(&cnk, &slf->loop_start);
+			DmRiff_readDword(&cnk, &slf->loop_end);
+			DmRiff_readDword(&cnk, &slf->resolution);
+		} else if (DmRiff_is(&cnk, DM_FOURCC_GUID, 0)) {
+			DmGuid_parse(&slf->guid, &cnk);
+		} else if (DmRiff_is(&cnk, DM_FOURCC_VERS, 0)) {
+			DmVersion_parse(&slf->version, &cnk);
+		} else if (DmRiff_is(&cnk, DM_FOURCC_LIST, DM_FOURCC_UNFO)) {
+			DmUnfo_parse(&slf->info, &cnk);
+		} else if (DmRiff_is(&cnk, DM_FOURCC_LIST, DM_FOURCC_TRKL)) {
+			DmSegment_parseTrackList(&slf->messages, &cnk);
 		}
 
 		DmRiff_reportDone(&cnk);

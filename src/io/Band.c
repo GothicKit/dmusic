@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT-Modern-Variant
 #include "_Internal.h"
 
-static void DmInstrument_parse(DmInstrument* slf, DmRiff* rif) {
+static void DmBand_parseInstrument(DmInstrument* slf, DmRiff* rif) {
 	DmRiff cnk;
 	while (DmRiff_readChunk(rif, &cnk)) {
 		if (DmRiff_is(&cnk, DM_FOURCC_BINS, 0)) {
@@ -26,23 +26,24 @@ static void DmInstrument_parse(DmInstrument* slf, DmRiff* rif) {
 	}
 }
 
-static DmResult DmInstrumentList_parse(DmInstrumentList* slf, DmRiff* rif) {
-	DmInstrument instrument;
+static DmResult DmBand_parseInstrumentList(DmBand* slf, DmRiff* rif) {
+	slf->instrument_count = DmRiff_chunks(rif);
+	slf->instruments = Dm_alloc(slf->instrument_count * sizeof(DmInstrument));
+	if (slf->instruments == NULL) {
+		return DmResult_MEMORY_EXHAUSTED;
+	}
 
 	DmRiff cnk;
-	while (DmRiff_readChunk(rif, &cnk)) {
-		if (DmRiff_is(&cnk, DM_FOURCC_LIST, DM_FOURCC_LBIN)) {
-			memset(&instrument, 0, sizeof instrument);
-
-			DmInstrument_parse(&instrument, &cnk);
-
-			// DmArray_add can result in a memory allocation failure which we need to catch.
-			DmResult rv = DmInstrumentList_add(slf, instrument);
-			if (rv != DmResult_SUCCESS) {
-				return rv;
-			}
+	for (size_t i = 0; i < slf->instrument_count; ++i) {
+		if (!DmRiff_readChunk(rif, &cnk)) {
+			return DmResult_FILE_CORRUPT;
 		}
 
+		if (!DmRiff_is(&cnk, DM_FOURCC_LIST, DM_FOURCC_LBIN)) {
+			return DmResult_FILE_CORRUPT;
+		}
+
+		DmBand_parseInstrument(&slf->instruments[i], &cnk);
 		DmRiff_reportDone(&cnk);
 	}
 
@@ -57,7 +58,7 @@ DmResult DmBand_parse(DmBand* slf, DmRiff* rif) {
 		} else if (DmRiff_is(&cnk, DM_FOURCC_LIST, DM_FOURCC_UNFO)) {
 			DmUnfo_parse(&slf->info, &cnk);
 		} else if (DmRiff_is(&cnk, DM_FOURCC_LIST, DM_FOURCC_LBIL)) {
-			DmResult rv = DmInstrumentList_parse(&slf->instruments, &cnk);
+			DmResult rv = DmBand_parseInstrumentList(slf, &cnk);
 			if (rv != DmResult_SUCCESS) {
 				return rv;
 			}

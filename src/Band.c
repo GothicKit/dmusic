@@ -9,7 +9,6 @@ void DmBand_init(DmBand* slf) {
 	}
 
 	memset(slf, 0, sizeof *slf);
-	DmInstrumentList_init(&slf->instruments);
 }
 
 void DmBand_free(DmBand* slf) {
@@ -18,7 +17,11 @@ void DmBand_free(DmBand* slf) {
 		return;
 	}
 
-	DmInstrumentList_free(&slf->instruments);
+	for (size_t i = 0; i < slf->instrument_count; ++i) {
+		DmInstrument_free(&slf->instruments[i]);
+	}
+
+	Dm_free(slf->instruments);
 }
 
 DmResult DmBand_download(DmBand* slf, DmLoader* loader) {
@@ -27,8 +30,8 @@ DmResult DmBand_download(DmBand* slf, DmLoader* loader) {
 	}
 
 	DmResult rv = DmResult_SUCCESS;
-	for (size_t i = 0; i < slf->instruments.length; ++i) {
-		DmInstrument* instrument = slf->instruments.data + i;
+	for (size_t i = 0; i < slf->instrument_count; ++i) {
+		DmInstrument* instrument = &slf->instruments[i];
 
 		// The DLS has already been downloaded. We don't need to do it again.
 		if (instrument->dls != NULL) {

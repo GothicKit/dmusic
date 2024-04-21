@@ -8,12 +8,11 @@ option(DM_ENABLE_ASAN "DirectMusic: Enable sanitizers in debug builds." ON)
 list(APPEND _DM_SOURCE
         src/util/Array.h
 
-        src/parse/Band.c
-        src/parse/Common.c
-        src/parse/Dls.c
-        src/parse/Segment.c
-        src/parse/Style.c
-        src/parse/Track.c
+        src/io/Band.c
+        src/io/Common.c
+        src/io/Dls.c
+        src/io/Segment.c
+        src/io/Style.c
 
         src/_Dls.h
         src/_Internal.h

@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: MIT-Modern-Variant
 #include "_Internal.h"
 
-
 DmResult DmSegment_create(DmSegment** slf) {
 	if (slf == NULL) {
 		return DmResult_INVALID_ARGUMENT;
@@ -72,4 +71,3 @@ DmResult DmSegment_download(DmSegment* slf, DmLoader* loader) {
 
 	return rv;
 }
-

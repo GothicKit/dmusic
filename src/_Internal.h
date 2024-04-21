@@ -121,12 +121,12 @@ typedef struct DmInstrument {
 	DmDls* dls;
 } DmInstrument;
 
-DmArray_DEFINE(DmInstrumentList, DmInstrument);
-
 typedef struct DmBand {
 	DmGuid guid;
 	DmUnfo info;
-	DmInstrumentList instruments;
+
+	size_t instrument_count;
+	DmInstrument* instruments;
 } DmBand;
 
 typedef enum DmPlayModeFlags {
@@ -331,7 +331,6 @@ DMINT DmResult DmSegment_create(DmSegment** slf);
 DMINT DmResult DmSegment_parse(DmSegment* slf, void* buf, size_t len);
 
 DMINT void DmMessage_free(DmMessage* slf);
-DMINT DmResult DmTrackList_parse(DmMessageList* slf, DmRiff* rif);
 
 DMINT void DmBand_init(DmBand* slf);
 DMINT void DmBand_free(DmBand* slf);
