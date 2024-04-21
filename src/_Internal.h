@@ -122,6 +122,8 @@ typedef struct DmInstrument {
 } DmInstrument;
 
 typedef struct DmBand {
+	_Atomic size_t reference_count;
+
 	DmGuid guid;
 	DmUnfo info;
 
@@ -197,7 +199,7 @@ typedef struct DmPattern {
 
 DmArray_DEFINE(DmPartList, DmPart);
 DmArray_DEFINE(DmPatternList, DmPattern);
-DmArray_DEFINE(DmBandList, DmBand);
+DmArray_DEFINE(DmBandList, DmBand*);
 
 typedef struct DmStyle {
 	_Atomic size_t reference_count;
@@ -262,7 +264,7 @@ typedef struct DmMessage_Chord {
 typedef struct DmMessage_Band {
 	DmMessageType type;
 	uint32_t time;
-	DmBand band;
+	DmBand* band;
 } DmMessage_Band;
 
 typedef struct DmMessage_Style {
@@ -332,8 +334,9 @@ DMINT DmResult DmSegment_parse(DmSegment* slf, void* buf, size_t len);
 
 DMINT void DmMessage_free(DmMessage* slf);
 
-DMINT void DmBand_init(DmBand* slf);
-DMINT void DmBand_free(DmBand* slf);
+DMINT DmResult DmBand_create(DmBand** slf);
+DMINT DmBand* DmBand_retain(DmBand* slf);
+DMINT void DmBand_release(DmBand* slf);
 DMINT DmResult DmBand_parse(DmBand* slf, DmRiff* rif);
 DMINT DmResult DmBand_download(DmBand* slf, DmLoader* loader);
 DMINT void DmInstrument_free(DmInstrument* slf);

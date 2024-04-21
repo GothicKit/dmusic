@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT-Modern-Variant
 #include "_Internal.h"
 
-DmArray_IMPLEMENT(DmBandList, DmBand, DmBand_free(itm));
+DmArray_IMPLEMENT(DmBandList, DmBand*, DmBand_release(*itm));
 DmArray_IMPLEMENT(DmPartList, DmPart, DmPart_free(itm));
 DmArray_IMPLEMENT(DmPatternList, DmPattern, DmPattern_free(itm));
 DmArray_IMPLEMENT(DmPartReferenceList, DmPartReference, DmPartReference_free(itm));

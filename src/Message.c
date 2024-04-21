@@ -8,7 +8,7 @@ void DmMessage_free(DmMessage* slf) {
 	}
 
 	if (slf->type == DmMessage_BAND) {
-		DmBand_free(&slf->band.band);
+		DmBand_release(slf->band.band);
 	} else if (slf->type == DmMessage_STYLE) {
 		DmStyle_release(slf->style.style);
 	}

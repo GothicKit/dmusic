@@ -149,17 +149,21 @@ DmResult DmStyle_parse(DmStyle* slf, void* buf, size_t len) {
 		} else if (DmRiff_is(&cnk, DM_FOURCC_LIST, DM_FOURCC_UNFO)) {
 			DmUnfo_parse(&slf->info, &cnk);
 		} else if (DmRiff_is(&cnk, DM_FOURCC_RIFF, DM_FOURCC_DMBD)) {
-			DmBand band;
-			DmBand_init(&band);
-
-			DmResult rv = DmBand_parse(&band, &cnk);
+			DmBand* band = NULL;
+			DmResult rv = DmBand_create(&band);
 			if (rv != DmResult_SUCCESS) {
-				DmBand_free(&band);
+				return rv;
+			}
+
+			rv = DmBand_parse(band, &cnk);
+			if (rv != DmResult_SUCCESS) {
+				DmBand_release(band);
 				return rv;
 			}
 
 			rv = DmBandList_add(&slf->bands, band);
 			if (rv != DmResult_SUCCESS) {
+				DmBand_release(band);
 				return rv;
 			}
 		} else if (DmRiff_is(&cnk, DM_FOURCC_LIST, DM_FOURCC_PART)) {

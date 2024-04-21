@@ -163,10 +163,14 @@ static DmResult DmSegment_parseBandItem(DmMessage_Band* slf, DmRiff* rif) {
 		if (DmRiff_is(&cnk, DM_FOURCC_BDIH, 0)) {
 			DmRiff_readDword(&cnk, &slf->time);
 		} else if (DmRiff_is(&cnk, DM_FOURCC_RIFF, DM_FOURCC_DMBD)) {
-			DmBand_init(&slf->band);
-			DmResult rv = DmBand_parse(&slf->band, &cnk);
+			DmResult rv = DmBand_create(&slf->band);
 			if (rv != DmResult_SUCCESS) {
-				DmBand_free(&slf->band);
+				return rv;
+			}
+
+			rv = DmBand_parse(slf->band, &cnk);
+			if (rv != DmResult_SUCCESS) {
+				DmBand_release(slf->band);
 				return rv;
 			}
 		}

@@ -54,7 +54,7 @@ DmResult DmStyle_download(DmStyle* slf, DmLoader* loader) {
 
 	DmResult rv = DmResult_SUCCESS;
 	for (size_t i = 0; i < slf->bands.length; ++i) {
-		rv = DmBand_download(&slf->bands.data[i], loader);
+		rv = DmBand_download(slf->bands.data[i], loader);
 		if (rv != DmResult_SUCCESS) {
 			break;
 		}

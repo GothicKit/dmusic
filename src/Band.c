@@ -2,18 +2,36 @@
 // SPDX-License-Identifier: MIT-Modern-Variant
 #include "_Internal.h"
 
-void DmBand_init(DmBand* slf) {
+DmResult DmBand_create(DmBand** slf) {
 	if (slf == NULL) {
-		Dm_report(DmLogLevel_ERROR, "DmBand: Internal error: DmBand_init called with a `NULL` pointer");
+		return DmResult_INVALID_ARGUMENT;
+	}
+
+	DmBand* new = *slf = Dm_alloc(sizeof *new);
+	if (new == NULL) {
+		return DmResult_MEMORY_EXHAUSTED;
+	}
+
+	new->reference_count = 1;
+	return DmResult_SUCCESS;
+}
+
+DmBand* DmBand_retain(DmBand* slf) {
+	if (slf == NULL) {
+		return NULL;
+	}
+
+	(void) atomic_fetch_add(&slf->reference_count, 1);
+	return slf;
+}
+
+void DmBand_release(DmBand* slf) {
+	if (slf == NULL) {
 		return;
 	}
 
-	memset(slf, 0, sizeof *slf);
-}
-
-void DmBand_free(DmBand* slf) {
-	if (slf == NULL) {
-		Dm_report(DmLogLevel_WARN, "DmBand: Internal error: DmBand_free called with a `NULL` pointer");
+	size_t count = atomic_fetch_sub(&slf->reference_count, 1) - 1;
+	if (count > 0) {
 		return;
 	}
 
@@ -22,6 +40,7 @@ void DmBand_free(DmBand* slf) {
 	}
 
 	Dm_free(slf->instruments);
+	Dm_free(slf);
 }
 
 DmResult DmBand_download(DmBand* slf, DmLoader* loader) {
