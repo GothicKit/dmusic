@@ -1,0 +1,53 @@
+cmake_minimum_required(VERSION 3.10)
+project(dmusic LANGUAGES C VERSION 0.0.1)
+
+set(CMAKE_C_STANDARD 11)
+
+option(DM_ENABLE_ASAN "DirectMusic: Enable sanitizers in debug builds." ON)
+
+list(APPEND _DM_SOURCE
+        src/util/Array.h
+
+        src/parse/Band.c
+        src/parse/Common.c
+        src/parse/Dls.c
+        src/parse/Segment.c
+        src/parse/Style.c
+        src/parse/Track.c
+
+        src/_Dls.h
+        src/_Internal.h
+        src/_Riff.h
+        src/Array.c
+        src/Common.c
+        src/Dls.c
+        src/Band.c
+        src/Loader.c
+        src/Logger.c
+        src/Memory.c
+        src/Message.c
+        src/Riff.c
+        src/Segment.c
+        src/Style.c
+)
+
+include(support/BuildSupport.cmake)
+bs_select_cflags(${DM_ENABLE_ASAN} _DM_COMPILE_FLAGS _DM_LINK_FLAGS)
+
+add_library(dmusic SHARED)
+target_sources(dmusic PRIVATE ${_DM_SOURCE})
+target_include_directories(dmusic PUBLIC include)
+target_include_directories(dmusic PRIVATE src)
+target_compile_definitions(dmusic PRIVATE DM_BUILD=1)
+target_compile_options(dmusic PRIVATE ${_DM_COMPILE_FLAGS})
+target_link_options(dmusic PRIVATE ${_DM_LINK_FLAGS})
+
+set_target_properties(dmusic PROPERTIES
+        CXX_VISIBILITY_PRESET hidden
+        VISIBILITY_INLINES_HIDDEN 1
+        DEBUG_POSTFIX "d"
+        VERSION ${PROJECT_VERSION}
+)
+
+install(TARGETS dmusic ARCHIVE LIBRARY RUNTIME)
+install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/include" TYPE INCLUDE)

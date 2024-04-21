@@ -1,0 +1,15 @@
+Checks: >
+  *,
+  -clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling,
+  -clang-analyzer-deadcode.DeadStores,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-multi-level-implicit-pointer-conversion,
+  -cppcoreguidelines-avoid-non-const-global-variables,
+  -llvm-header-guard,
+  -llvmlibc-restrict-system-libc-headers,
+  -misc-include-cleaner,
+  -altera-struct-pack-align,
+  -altera-unroll-loops,
+  -readability-identifier-length,
+  -hicpp-signed-bitwise
+WarningsAsErrors: '*'
