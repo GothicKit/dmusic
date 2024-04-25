@@ -43,6 +43,7 @@ typedef enum DmResult {
 	DmResult_MEMORY_EXHAUSTED,
 	DmResult_NOT_FOUND,
 	DmResult_FILE_CORRUPT,
+	DmResult_INTERNAL_ERROR,
 } DmResult;
 
 typedef struct DmGuid {
@@ -248,3 +249,9 @@ DMAPI DmResult DmLoader_addResolver(DmLoader* slf, DmLoaderResolverCallback* res
 DMAPI DmResult DmLoader_getSegment(DmLoader* slf, char const* name, DmSegment** segment);
 
 /// \}
+
+typedef enum DmRenderOptions {
+	DmRender_SHORT = 1 << 0,
+	DmRender_FLOAT = 1 << 1,
+	DmRender_STEREO = 1 << 2,
+} DmRenderOptions;

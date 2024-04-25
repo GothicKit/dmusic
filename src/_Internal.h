@@ -6,6 +6,7 @@
 #include "_Dls.h"
 #include "_Riff.h"
 #include "util/Array.h"
+#include "util/Tsf.h"
 
 #include <stdatomic.h>
 #include <stdbool.h>
@@ -289,13 +290,10 @@ typedef union DmMessage {
 
 DmArray_DEFINE(DmMessageList, DmMessage);
 
-typedef enum DmSynthFormat {
-	DmSynth_S16LE,
-	DmSynth_F32LE,
-} DmSynthFormat;
-
 typedef struct DmSynth {
-	uint32_t channels;
+	size_t channel_count;
+	tsf** channels;
+	DmBand* band;
 } DmSynth;
 
 struct DmSegment {
@@ -369,8 +367,8 @@ DMINT void DmPattern_free(DmPattern* slf);
 DMINT void DmSynth_init(DmSynth* slf);
 DMINT void DmSynth_free(DmSynth* slf);
 DMINT void DmSynth_sendBandUpdate(DmSynth* slf, DmBand* band);
-DMINT void DmSynth_sendControl(DmSynth* slf, uint32_t channel, uint8_t control, uint32_t value);
+DMINT void DmSynth_sendControl(DmSynth* slf, uint32_t channel, uint8_t control, int32_t value);
 DMINT void DmSynth_sendNoteOn(DmSynth* slf, uint32_t channel, uint8_t note, uint8_t velocity);
 DMINT void DmSynth_sendNoteOff(DmSynth* slf, uint32_t channel, uint8_t note);
 DMINT void DmSynth_sendNoteOffAll(DmSynth* slf, uint32_t channel);
-DMINT void DmSynth_render(DmSynth* slf, void* buf, size_t len, DmSynthFormat fmt);
+DMINT void DmSynth_render(DmSynth* slf, void* buf, size_t len, DmRenderOptions fmt);

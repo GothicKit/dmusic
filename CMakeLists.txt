@@ -7,6 +7,7 @@ option(DM_ENABLE_ASAN "DirectMusic: Enable sanitizers in debug builds." ON)
 
 list(APPEND _DM_SOURCE
         src/util/Array.h
+        src/util/Tsf.c
 
         src/io/Band.c
         src/io/Common.c
@@ -28,6 +29,7 @@ list(APPEND _DM_SOURCE
         src/Riff.c
         src/Segment.c
         src/Style.c
+        src/Synth.c
 )
 
 include(support/BuildSupport.cmake)

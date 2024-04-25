@@ -160,7 +160,7 @@ static DmResult DmDls_parseInstrument(DmDlsInstrument* slf, DmRiff* rif) {
 		if (DmRiff_is(&cnk, DM_FOURCC_INSH, 0)) {
 			DmRiff_readDword(&cnk, &slf->region_count);
 			DmRiff_readDword(&cnk, &slf->bank);
-			DmRiff_readDword(&cnk, &slf->instrument);
+			DmRiff_readDword(&cnk, &slf->patch);
 		} else if (DmRiff_is(&cnk, DM_FOURCC_DLID, 0)) {
 			DmGuid_parse(&slf->guid, &cnk);
 		} else if (DmRiff_is(&cnk, DM_FOURCC_LIST, DM_FOURCC_INFO)) {
@@ -254,8 +254,8 @@ static void DmDls_parseWaveTableItem(DmDlsWave* slf, DmRiff* rif) {
 		if (DmRiff_is(&cnk, DM_FOURCC_LIST, DM_FOURCC_INFO)) {
 			DmInfo_parse(&slf->info, &cnk);
 		} else if (DmRiff_is(&cnk, DM_FOURCC_DATA, 0)) {
-			slf->data_length = cnk.len;
-			slf->data = cnk.mem;
+			slf->pcm_size = cnk.len;
+			slf->pcm = cnk.mem;
 			cnk.pos = cnk.len;
 		} else if (DmRiff_is(&cnk, DM_FOURCC_WSMP, 0)) {
 			DmDls_parseWaveSample(&slf->sample, &cnk);

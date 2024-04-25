@@ -73,7 +73,7 @@ typedef struct DmDlsWaveSample {
 
 typedef struct DmDlsArticulator {
 	uint32_t connection_count;
-	struct {
+	struct DmDlsArticulatorConnection {
 		DmDlsArticulatorSource source;
 		uint16_t control;
 		DmDlsArticulatorDestination destination;
@@ -106,7 +106,7 @@ typedef struct DmDlsInstrument {
 	DmInfo info;
 
 	uint32_t bank;
-	uint32_t instrument;
+	uint32_t patch;
 
 	uint32_t region_count;
 	DmDlsRegion* regions;
@@ -136,8 +136,8 @@ typedef struct DmDlsWave {
 
 	DmDlsWaveSample sample;
 
-	uint32_t data_length;
-	uint8_t const* data;
+	uint32_t pcm_size;
+	uint8_t const* pcm;
 } DmDlsWave;
 
 typedef struct DmDls {
@@ -171,3 +171,5 @@ DMINT void DmDlsRegion_free(DmDlsRegion* slf);
 
 DMINT void DmDlsArticulator_init(DmDlsArticulator* slf);
 DMINT void DmDlsArticulator_free(DmDlsArticulator* slf);
+
+DMINT size_t DmDls_decodeSamples(DmDlsWave const* slf, float* out, size_t len);

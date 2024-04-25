@@ -47,7 +47,6 @@ size_t DmDls_release(DmDls* slf) {
 	return 0;
 }
 
-
 void DmDlsInstrument_init(DmDlsInstrument* slf) {
 	if (slf == NULL) {
 		return;
@@ -61,7 +60,7 @@ void DmDlsInstrument_free(DmDlsInstrument* slf) {
 		return;
 	}
 
-	for (size_t i = 0; i< slf->region_count; ++i) {
+	for (size_t i = 0; i < slf->region_count; ++i) {
 		DmDlsRegion_free(&slf->regions[i]);
 	}
 
@@ -69,7 +68,7 @@ void DmDlsInstrument_free(DmDlsInstrument* slf) {
 	slf->regions = NULL;
 	slf->region_count = 0;
 
-	for (size_t i = 0; i< slf->articulator_count; ++i) {
+	for (size_t i = 0; i < slf->articulator_count; ++i) {
 		DmDlsArticulator_free(&slf->articulators[i]);
 	}
 
@@ -91,7 +90,7 @@ void DmDlsRegion_free(DmDlsRegion* slf) {
 		return;
 	}
 
-	for (size_t i = 0; i< slf->articulator_count; ++i) {
+	for (size_t i = 0; i < slf->articulator_count; ++i) {
 		DmDlsArticulator_free(&slf->articulators[i]);
 	}
 
@@ -116,4 +115,135 @@ void DmDlsArticulator_free(DmDlsArticulator* slf) {
 	Dm_free(slf->connections);
 	slf->connections = NULL;
 	slf->connection_count = 0;
+}
+
+static size_t DmDlsWave_decodeShort(DmDlsWave const* slf, float* out, size_t len) {
+	uint32_t size = slf->pcm_size / 2;
+	if (out == NULL) {
+		return size;
+	}
+
+	int16_t const* raw = (int16_t const*) slf->pcm;
+	size_t i = 0;
+	for (i = 0; i < size && i < len; ++i) {
+		out[i] = (float) raw[i] / 32767.f;
+	}
+
+	return i;
+}
+
+static int signed_4bit(int v) {
+	return v & 0x8 ? v - 16 : v;
+}
+
+static int clamp_16bit(int v) {
+	if (v < INT16_MIN) {
+		return INT16_MIN;
+	}
+
+	if (v > INT16_MAX) {
+		return INT16_MAX;
+	}
+
+	return v;
+}
+
+static int max(int a, int b) {
+	return a >= b ? a : b;
+}
+
+// TODO(lmichaelis): These are the 'built in' set of 7 predictor value pairs; additional values can be added
+//  				 to this table by including them as metadata chunks in the WAVE header
+static int ADPCM_ADAPT_COEFF1[7] = {256, 512, 0, 192, 240, 460, 392};
+static int ADPCM_ADAPT_COEFF2[7] = {0, -256, 0, 64, 0, -208, -232};
+static int16_t ADPCM_ADAPT_TABLE[16] = {230, 230, 230, 230, 307, 409, 512, 614, 768, 614, 512, 409, 307, 230, 230, 230};
+
+#define DmInt_read8(src)                                                                                               \
+	*((uint8_t const*) (src));                                                                                         \
+	(src) += 1
+
+#define DmInt_read16(src)                                                                                              \
+	*((int16_t const*) (src));                                                                                         \
+	(src) += 2
+
+// See https://wiki.multimedia.cx/index.php/Microsoft_ADPCM
+static uint8_t const* DmDls_decodeAdpcmBlock(uint8_t const* adpcm, float* pcm, uint32_t block_size) {
+	uint8_t block_predictor = DmInt_read8(adpcm);
+	int32_t delta = DmInt_read16(adpcm);
+	int16_t sample_a = DmInt_read16(adpcm);
+	int16_t sample_b = DmInt_read16(adpcm);
+
+	*pcm++ = sample_b;
+	*pcm++ = sample_a;
+
+	int coeff_1 = ADPCM_ADAPT_COEFF1[block_predictor];
+	int coeff_2 = ADPCM_ADAPT_COEFF2[block_predictor];
+
+	uint32_t remaining = block_size - 7 /* header */;
+	for (uint32_t i = 0; i < remaining; ++i) {
+		int b = DmInt_read8(adpcm);
+
+		// High Nibble
+		int nibble = signed_4bit((b & 0xF0) >> 4);
+		int predictor = (coeff_1 * sample_a + coeff_2 * sample_b) / 256;
+		predictor += nibble * delta;
+		predictor = clamp_16bit(predictor);
+		*pcm++ = (int16_t) predictor;
+		sample_b = sample_a;
+		sample_a = (int16_t) predictor;
+		delta = max((ADPCM_ADAPT_TABLE[(b & 0xF0) >> 4] * delta) / 256, 16);
+
+		// Low Nibble
+		nibble = signed_4bit((b & 0x0F) >> 0);
+		predictor = (coeff_1 * sample_a + coeff_2 * sample_b) / 256;
+		predictor += nibble * delta;
+		predictor = clamp_16bit(predictor);
+		*pcm++ = (int16_t) predictor;
+		sample_b = sample_a;
+		sample_a = (int16_t) predictor;
+		delta = max((ADPCM_ADAPT_TABLE[b & 0x0F] * delta) / 256, 16);
+	}
+
+	return adpcm;
+}
+
+static size_t DmDls_decodeAdpcm(DmDlsWave const* slf, float* out, size_t len) {
+	if (slf->channels != 1) {
+		Dm_report(DmLogLevel_ERROR,
+		          "DmDls: Attempted to decode ADPCM with %d channels; only mono is supported!",
+		          slf->channels);
+		return 0;
+	}
+
+	uint32_t block_count = slf->pcm_size / slf->block_align;
+	uint32_t frames_per_block = (slf->block_align - 6 * slf->channels) * 2 /* two frames per channel from the header */;
+	uint32_t size = frames_per_block * block_count;
+
+	if (out == NULL || len == 0) {
+		return size;
+	}
+
+	uint8_t const* adpcm = slf->pcm;
+	size_t offset = 0;
+	for (size_t i = 0; i < block_count; ++i) {
+		if (len < offset + frames_per_block) {
+			break;
+		}
+
+		adpcm = DmDls_decodeAdpcmBlock(adpcm, out + offset, slf->block_align);
+		offset += frames_per_block;
+	}
+
+	return offset;
+}
+
+size_t DmDls_decodeSamples(DmDlsWave const* slf, float* out, size_t len) {
+	switch (slf->format) {
+	case DmDlsWaveFormat_PCM:
+		return DmDlsWave_decodeShort(slf, out, len);
+	case DmDlsWaveFormat_ADPCM:
+		return DmDls_decodeAdpcm(slf, out, len);
+	default:
+		return 0;
+	}
 }
