@@ -109,9 +109,9 @@ static void DmSegment_parseChordItem(DmMessage_Chord* slf, DmRiff* rif) {
 	uint32_t max_subchord_count = (sizeof slf->subchords) / (sizeof *slf->subchords);
 	if (slf->subchord_count > max_subchord_count) {
 		Dm_report(DmLogLevel_ERROR,
-				  "DmMessage: Chord message reports too many sub-chords: got %d, expected at maximum %d",
-				  slf->subchord_count,
-				  max_subchord_count);
+		          "DmMessage: Chord message reports too many sub-chords: got %d, expected at maximum %d",
+		          slf->subchord_count,
+		          max_subchord_count);
 		slf->subchord_count = max_subchord_count;
 	}
 
@@ -202,7 +202,6 @@ static DmResult DmSegment_parseBandList(DmMessageList* slf, DmRiff* rif) {
 
 	return DmResult_SUCCESS;
 }
-
 
 static DmResult DmSegment_parseBandTrack(DmMessageList* slf, DmRiff* rif) {
 	DmRiff cnk;

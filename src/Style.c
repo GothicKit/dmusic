@@ -83,7 +83,8 @@ void DmPart_free(DmPart* slf) {
 
 void DmPartReference_init(DmPartReference* slf) {
 	if (slf == NULL) {
-		Dm_report(DmLogLevel_ERROR, "DmPartReference: Internal error: DmPartReference_init called with a `NULL` pointer");
+		Dm_report(DmLogLevel_ERROR,
+		          "DmPartReference: Internal error: DmPartReference_init called with a `NULL` pointer");
 		return;
 	}
 

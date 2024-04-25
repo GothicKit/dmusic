@@ -64,13 +64,13 @@ static void DmInt_defaultLogger(void* ctx, DmLogLevel lvl, char const* msg) {
 	(void) gmtime_r(&now_t, &now);
 
 	(void) fprintf(stderr,
-				   ANSI_GRAY "%04d-%02d-%02d %02d:%02d:%02d " ANSI_RESET,
-				   now.tm_year + 1900,
-				   now.tm_mon + 1,
-				   now.tm_mday,
-				   now.tm_hour,
-				   now.tm_min,
-				   now.tm_sec);
+	               ANSI_GRAY "%04d-%02d-%02d %02d:%02d:%02d " ANSI_RESET,
+	               now.tm_year + 1900,
+	               now.tm_mon + 1,
+	               now.tm_mday,
+	               now.tm_hour,
+	               now.tm_min,
+	               now.tm_sec);
 
 	char const* format = PREFIX " (     ) › %s: %s\n";
 	switch (lvl) {

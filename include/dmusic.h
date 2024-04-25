@@ -6,13 +6,13 @@
 
 /// \cond DmHidden
 #ifdef __cplusplus
-#define DM_EXTERN extern "C"
+	#define DM_EXTERN extern "C"
 #else
-#define DM_EXTERN
+	#define DM_EXTERN
 #endif
 
 #if defined(_WIN32) || defined(__CYGWIN__)
-#ifdef DM_BUILD
+	#ifdef DM_BUILD
 		#ifdef __GNUC__
 			#define DMAPI DM_EXTERN __attribute__((dllexport))
 		#else
@@ -27,8 +27,8 @@
 	#endif
 	#define DMINT
 #else
-#define DMAPI DM_EXTERN __attribute__((visibility("default")))
-#define DMINT DM_EXTERN __attribute__((visibility("hidden")))
+	#define DMAPI DM_EXTERN __attribute__((visibility("default")))
+	#define DMINT DM_EXTERN __attribute__((visibility("hidden")))
 #endif
 /// \endcond
 

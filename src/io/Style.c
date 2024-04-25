@@ -201,4 +201,3 @@ DmResult DmStyle_parse(DmStyle* slf, void* buf, size_t len) {
 
 	return DmResult_SUCCESS;
 }
-
