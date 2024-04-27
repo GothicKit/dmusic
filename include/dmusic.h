@@ -250,8 +250,43 @@ DMAPI DmResult DmLoader_getSegment(DmLoader* slf, char const* name, DmSegment** 
 
 /// \}
 
+typedef struct DmPerformance DmPerformance;
+
 typedef enum DmRenderOptions {
 	DmRender_SHORT = 1 << 0,
 	DmRender_FLOAT = 1 << 1,
 	DmRender_STEREO = 1 << 2,
 } DmRenderOptions;
+
+typedef enum DmPlaybackFlags {
+	DmPlayback_REFTIME = 1 << 6,
+	DmPlayback_SECONDARY = 1 << 7,
+	DmPlayback_QUEUE = 1 << 8,
+	DmPlayback_CONTROL = 1 << 9,
+	DmPlayback_AFTER_PREPARE_TIME = 1 << 10,
+	DmPlayback_GRID = 1 << 11,
+	DmPlayback_BEAT = 1 << 12,
+	DmPlayback_MEASURE = 1 << 13,
+	DmPlayback_DEFAULT = 1 << 14,
+	DmPlayback_NOINVALIDATE = 1 << 15,
+	DmPlayback_ALIGN = 1 << 16,
+	DmPlayback_VALID_START_BEAT = 1 << 17,
+	DmPlayback_VALID_START_GRID = 1 << 18,
+	DmPlayback_VALID_START_TICK = 1 << 19,
+	DmPlayback_AUTOTRANSITION = 1 << 20,
+	DmPlayback_AFTER_QUEUE_TIME = 1 << 21,
+	DmPlayback_AFTER_LATENCY_TIME = 1 << 22,
+	DmPlayback_SEGMENT_END = 1 << 23,
+	DmPlayback_MARKER = 1 << 24,
+	DmPlayback_TIMESIG_ALWAYS = 1 << 25,
+	DmPlayback_USE_AUDIOPATH = 1 << 26,
+	DmPlayback_VALID_START_MEASURE = 1 << 27,
+	DmPlayback_INVALIDATE_PRI = 1 << 28
+} DmPlaybackFlags;
+
+DMAPI DmResult DmPerformance_create(DmPerformance** slf);
+DMAPI DmPerformance* DmPerformance_retain(DmPerformance* slf);
+DMAPI void DmPerformance_release(DmPerformance* slf);
+
+DMAPI DmResult DmPerformance_playSegment(DmPerformance* slf, DmSegment* sgt, DmPlaybackFlags flags);
+DMAPI DmResult DmPerformance_renderPcm(DmPerformance* slf, void* buf, size_t len, DmRenderOptions opts);

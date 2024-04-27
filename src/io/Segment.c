@@ -15,6 +15,10 @@ static DmResult DmSegment_parseTempoTrack(DmMessageList* slf, DmRiff* rif) {
 		msg.type = DmMessage_TEMPO;
 
 		DmRiff_readDword(rif, &msg.time);
+
+		uint32_t pad;
+		DmRiff_readDword(rif, &pad);
+
 		DmRiff_readDouble(rif, &msg.tempo.tempo);
 
 		DmResult rv = DmMessageList_add(slf, msg);

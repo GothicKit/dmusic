@@ -2,15 +2,9 @@
 // SPDX-License-Identifier: MIT-Modern-Variant
 #include "_Internal.h"
 #include <stdlib.h>
+#include <math.h>
 
-#define TSF_MALLOC Dm_alloc
-#define TSF_FREE Dm_free
-
-// FIXME(lmichaelis): Realloc won't work with custom allocator!
-#define TSF_REALLOC realloc
-
-#define TSF_IMPLEMENTATION
-#include "Tsf.h"
+#include <tsf.h>
 
 static double dlsTimeCentsToSeconds(int32_t tc) {
 	return exp2((double) tc / (1200.0 * 65536.0));
@@ -33,8 +27,11 @@ enum {
 	kInstrument = 41,
 	kKeyRange = 43,
 	kVelRange = 44,
+	kInitialAttenuation = 48,
 	kSampleID = 53,
 	kSampleModes = 54,
+
+	kSamplePadding = 46,
 };
 
 static DmDlsInstrument* DmSynth_findDlsInstrument(DmInstrument* slf) {
@@ -152,6 +149,9 @@ DmResult DmSynth_createTsfForInstrument(DmInstrument* slf, tsf** out) {
 	for (uint32_t i = 0; i < dls->region_count; ++i) {
 		DmDlsWave* wav = &slf->dls->wave_table[dls->regions[i].link_table_index];
 		sample_count += DmDls_decodeSamples(wav, NULL, 0);
+
+		// There are 46 0-samples after each "real" sample
+		sample_count += kSamplePadding;
 	}
 
 	// 1.2. Decode all required samples
@@ -175,6 +175,9 @@ DmResult DmSynth_createTsfForInstrument(DmInstrument* slf, tsf** out) {
 		sample_headers[i].sampleType = 1; // SFSampleLink::monoSample
 		sample_offset += DmDls_decodeSamples(wav, samples + sample_offset, sample_count - sample_offset);
 		sample_headers[i].end = sample_offset;
+
+		// There are 46 0-samples after each "real" sample
+		sample_offset += kSamplePadding;
 	}
 
 	strncpy(sample_headers[sample_headers_length - 1].sampleName, "EOS", 19);
@@ -182,17 +185,22 @@ DmResult DmSynth_createTsfForInstrument(DmInstrument* slf, tsf** out) {
 	// 2. Generate the SF2 instrument zones from the DLS instrument regions.
 
 	// 2.1. Count the number of SF2 instrument generators (and modulators) required
-	// NOTE: One for the sentinel, four for the implicit generators 'kKeyRange',
-	//       'kVelRange', 'kAttackVolEnv', 'kSampleModes' and 'kSampleID' for each zone
-	size_t instrument_generator_count = 1 + (5 * dls->region_count);
+	// NOTE: One for the sentinel, 6 for the implicit generators 'kKeyRange',
+	//       'kVelRange', 'kAttackVolEnv', 'kInitialAttenuation', 'kSampleModes' and 'kSampleID' for each zone
+	size_t instrument_generator_count = 1 + (6 * dls->region_count);
 
 	// NOTE: We only support generators at the moment.
 	for (size_t i = 0; i < dls->region_count; ++i) {
 		DmDlsRegion* region = &dls->regions[i];
-		for (size_t j = 0; j < region->articulator_count; ++i) {
+		for (size_t j = 0; j < region->articulator_count; ++j) {
 			DmDlsArticulator* articulator = &region->articulators[j];
 			instrument_generator_count += articulator->connection_count;
 		}
+	}
+
+	for (size_t j = 0; j < dls->articulator_count; ++j) {
+		DmDlsArticulator* articulator = &dls->articulators[j];
+		instrument_generator_count += articulator->connection_count * dls->region_count;
 	}
 
 	// 2.2. Actually create the instrument zone definitions
@@ -232,10 +240,21 @@ DmResult DmSynth_createTsfForInstrument(DmInstrument* slf, tsf** out) {
 
 		gen = &instrument_generators[generator_index++];
 		gen->genOper = kAttackVolEnv;
-		gen->genAmount.wordAmount = 61550;
+		gen->genAmount.shortAmount = sf2SecondsToTimeCents(0.1);
 
-		for (size_t j = 0; j < region->articulator_count; ++i) {
+		gen = &instrument_generators[generator_index++];
+		gen->genOper = kInitialAttenuation;
+		gen->genAmount.shortAmount = (tsf_s16) region->sample.attenuation;
+
+		for (size_t j = 0; j < region->articulator_count; ++j) {
 			DmDlsArticulator* articulator = &region->articulators[j];
+
+			gen = &instrument_generators[generator_index];
+			generator_index += DmSynth_convertGeneratorArticulators(gen, articulator);
+		}
+
+		for (size_t j = 0; j < dls->articulator_count; ++j) {
+			DmDlsArticulator* articulator = &dls->articulators[j];
 
 			gen = &instrument_generators[generator_index];
 			generator_index += DmSynth_convertGeneratorArticulators(gen, articulator);
@@ -268,25 +287,24 @@ DmResult DmSynth_createTsfForInstrument(DmInstrument* slf, tsf** out) {
 	instrument_zones[dls->region_count].instModNdx = 0;
 
 	// 3. Generate preset-level articulators
-	struct tsf_hydra_pbag preset_zones[2];      // One for the sentinel
-	struct tsf_hydra_pgen preset_generators[2]; // One for the sentinel, one is the instrument selector
-	struct tsf_hydra_pmod preset_modulators[1]; // Only the sentinel
 
-	preset_zones[0].genNdx = 0;
-	preset_zones[0].modNdx = 0;
-	preset_zones[1].genNdx = 1;
-	preset_zones[1].modNdx = 0;
+	struct tsf_hydra_pbag preset_zones[2];      // One for the sentinel
+	struct tsf_hydra_pgen preset_generators[2];// One for the sentinel
+	struct tsf_hydra_pmod preset_modulators[1]; // Only the sentinel
 
 	preset_generators[0].genOper = kInstrument;
 	preset_generators[0].genAmount.wordAmount = 0;
+	generator_index += 1;
+
 	preset_generators[1].genOper = 0;
 	preset_generators[1].genAmount.wordAmount = 1;
+	generator_index += 1;
 
-	if (dls->articulator_count != 0) {
-		Dm_report(DmLogLevel_WARN,
-		          "DmSynth: DLS contains instrument-level articulators for '%s'; this is not implemented",
-		          dls->info.inam);
-	}
+	preset_zones[0].genNdx = 0;
+	preset_zones[0].modNdx = 0;
+	preset_zones[1].genNdx = (tsf_u16) generator_index;
+	preset_zones[1].modNdx = 0;
+
 
 	// 4. Finalize the instrument and preset
 	struct tsf_hydra_phdr preset_headers[2]; // One for the sentinel
@@ -350,6 +368,11 @@ DmResult DmSynth_createTsfForInstrument(DmInstrument* slf, tsf** out) {
 
 	res->outSampleRate = 44100.0F;
 	res->fontSamples = samples;
+
+	if (!tsf_set_max_voices(res, (int) (dls->region_count * 2))) {
+		Dm_report(DmLogLevel_ERROR, "DmSynth: Failed to set tsf voice count");
+		return DmResult_INTERNAL_ERROR;
+	}
 
 	Dm_free(sample_headers);
 	Dm_free(instrument_zones);

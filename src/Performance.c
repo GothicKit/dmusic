@@ -1,0 +1,700 @@
+// Copyright © 2024. GothicKit Contributors
+// SPDX-License-Identifier: MIT-Modern-Variant
+#include "_Internal.h"
+#include <stdlib.h>
+
+static uint32_t max(uint32_t a, uint32_t b) {
+	return a > b ? a : b;
+}
+
+DmResult DmPerformance_create(DmPerformance** slf) {
+	if (slf == NULL) {
+		return DmResult_INVALID_ARGUMENT;
+	}
+
+	DmPerformance* new = *slf = Dm_alloc(sizeof *new);
+	if (new == NULL) {
+		return DmResult_MEMORY_EXHAUSTED;
+	}
+
+	new->reference_count = 1;
+	new->tempo = 100;
+	new->groove = 1;
+
+	DmResult rv = DmMessageQueue_init(&new->control_queue);
+	if (rv != DmResult_SUCCESS) {
+		return rv;
+	}
+
+	rv = DmMessageQueue_init(&new->music_queue);
+	if (rv != DmResult_SUCCESS) {
+		return rv;
+	}
+
+	return DmResult_SUCCESS;
+}
+
+DmPerformance* DmPerformance_retain(DmPerformance* slf) {
+	if (slf == NULL) {
+		return NULL;
+	}
+
+	(void) atomic_fetch_add(&slf->reference_count, 1);
+	return slf;
+}
+
+void DmPerformance_release(DmPerformance* slf) {
+	if (slf == NULL) {
+		return;
+	}
+
+	size_t refs = atomic_fetch_sub(&slf->reference_count, 1) - 1;
+	if (refs > 0) {
+		return;
+	}
+
+	DmMessageQueue_free(&slf->control_queue);
+	DmMessageQueue_free(&slf->music_queue);
+	DmSegment_release(slf->segment);
+	DmStyle_release(slf->style);
+	DmSynth_free(&slf->synth);
+	Dm_free(slf);
+}
+
+// See https://documentation.help/DirectMusic/dmussegfflags.htm
+static uint32_t DmPerformance_getStartTime(DmPerformance* slf, DmPlaybackFlags flags) {
+	// TODO:
+	if (flags & DmPlayback_QUEUE) {
+	} else if (flags & DmPlayback_GRID) {
+	} else if (flags & DmPlayback_BEAT) {
+	} else if (flags & DmPlayback_MEASURE) {
+	} else if (flags & DmPlayback_SEGMENT_END) {
+	} else if (flags & DmPlayback_MARKER) {
+	}
+
+	return slf->time;
+}
+
+DmResult DmPerformance_playSegment(DmPerformance* slf, DmSegment* sgt, DmPlaybackFlags flags) {
+	if (slf == NULL) {
+		return DmResult_INVALID_ARGUMENT;
+	}
+
+	if (flags & DmPlayback_SECONDARY) {
+		Dm_report(DmLogLevel_ERROR, "DmPerformance: Secondary segments are not yet supported");
+		return DmResult_INVALID_ARGUMENT;
+	}
+
+	if (flags & DmPlayback_DEFAULT) {
+		flags = (DmPlaybackFlags) sgt->resolution;
+	}
+
+	uint32_t offset = DmPerformance_getStartTime(slf, flags);
+
+	DmMessage msg;
+	msg.time = 0;
+	msg.type = DmMessage_SEGMENT;
+	msg.segment.segment = sgt;
+	DmMessageQueue_add(&slf->control_queue, &msg, offset);
+
+	return DmResult_SUCCESS;
+}
+
+enum {
+	DmInt_PULSES_PER_QUARTER_NOTE = 768,
+};
+
+static uint32_t DmPerformance_commandToEmbellishment(DmCommandType cmd) {
+	switch (cmd) {
+	case DmCommand_GROOVE:
+		return 0; // "normal"
+	case DmCommand_FILL:
+		return 1; // "fill"
+	case DmCommand_INTRO:
+		return 4; // "intro"
+	case DmCommand_BREAK:
+		return 2; // "break"
+	case DmCommand_END:
+		return 8;
+	default:
+		Dm_report(DmLogLevel_ERROR, "DmPerformance: Embellishment not implemented: %s", cmd);
+		break;
+	}
+
+	return 0; // "normal"
+}
+
+// See: https://documentation.help/DirectMusic/howmusicvariesduringplayback.htm
+static DmPattern* DmPerformance_choosePattern(DmPerformance* slf, DmCommandType cmd) {
+	size_t suitable_pattern_index = 0;
+	size_t suitable_pattern_count = 0;
+
+	for (size_t i = 0; i < slf->style->patterns.length; ++i) {
+		DmPattern* pttn = &slf->style->patterns.data[i];
+
+		// Ignore patterns outside the current groove level.
+		if (slf->groove < pttn->groove_bottom || slf->groove > pttn->groove_top) {
+			continue;
+		}
+
+		// Patterns with a differing embellishment are not supported
+		if (pttn->embellishment != DmPerformance_commandToEmbellishment(cmd)) {
+			continue;
+		}
+
+		suitable_pattern_index = i;
+		suitable_pattern_count += 1;
+	}
+
+	if (suitable_pattern_count == 0) {
+		return NULL;
+	}
+
+	if (suitable_pattern_count == 1) {
+		return &slf->style->patterns.data[suitable_pattern_index];
+	}
+
+	// Select a random pattern. TODO(lmichaelis): This behaviour seems to be associated with DX < 8 only,
+	// newer versions should have some way of defining how to select the pattern if more than 1 choice is
+	// available but I couldn't find it.
+	suitable_pattern_index = (size_t) rand() % suitable_pattern_count;
+
+	// Do the thing from above again, but this time return the selected pattern!
+	// TODO(lmichaelis): Deduplicate!
+	for (size_t i = 0; i < slf->style->patterns.length; ++i) {
+		DmPattern* pttn = &slf->style->patterns.data[i];
+
+		if (slf->groove < pttn->groove_bottom || slf->groove > pttn->groove_top) {
+			continue;
+		}
+
+		if (pttn->embellishment != DmPerformance_commandToEmbellishment(cmd)) {
+			continue;
+		}
+
+		if (suitable_pattern_index == 0) {
+			return pttn;
+		}
+
+		suitable_pattern_index--;
+	}
+
+	return NULL;
+}
+
+static uint32_t DmPerformance_getBeatLength(DmTimeSignature sig) {
+	if (sig.beat == 0) {
+		return DmInt_PULSES_PER_QUARTER_NOTE / 64;
+	} else if (sig.beat <= 4) {
+		return DmInt_PULSES_PER_QUARTER_NOTE * (4 / sig.beat);
+	} else {
+		return DmInt_PULSES_PER_QUARTER_NOTE / (sig.beat / 4);
+	}
+}
+
+static uint32_t DmPerformance_getMeasureLength(DmTimeSignature sig) {
+	return sig.beats_per_measure * DmPerformance_getBeatLength(sig);
+}
+
+static uint32_t DmPerformance_getNoteStartTime(DmNote note, DmTimeSignature sig) {
+	const uint32_t DMUS_PPQ = DmInt_PULSES_PER_QUARTER_NOTE;
+	return (uint32_t) note.time_offset +
+	    ((note.grid_start / sig.grids_per_beat) * ((DMUS_PPQ * 4) / sig.beat) +
+	     (note.grid_start % sig.grids_per_beat) * (((DMUS_PPQ * 4) / sig.beat) / sig.grids_per_beat));
+}
+
+static uint32_t DmInt_DEFAULT_SCALE_PATTERN = 0xab5ab5;
+static uint32_t DmInt_FALLBACK_SCALES[12] = {
+    0xab5ab5,
+    0x6ad6ad,
+    0x5ab5ab,
+    0xad5ad5,
+    0x6b56b5,
+    0x5ad5ad,
+    0x56b56b,
+    0xd5ad5a,
+    0xb56b56,
+    0xd6ad6a,
+    0xb5ab5a,
+    0xad6ad6,
+};
+
+uint8_t bit_count(uint32_t v) {
+	uint8_t count = 0;
+
+	for (uint8_t i = 0u; i < 32; ++i) {
+		count += v & 1;
+		v >>= 1;
+	}
+
+	return count;
+}
+
+uint32_t fixup_scale(uint32_t scale, uint8_t scale_root) {
+	// Force the scale to be exactly two octaves wide by zero-ing out the upper octave and
+	// copying the lower octave into the upper one
+	scale = (scale & 0x0FFF) | (scale << 12);
+
+	// Add the root to the scale
+	scale = scale >> (12 - (scale_root & 12));
+
+	// Clean up the scale again.
+	scale = (scale & 0x0FFF) | (scale << 12);
+
+	// If there are less than 5 bits set in the scale, figure out a fallback to use instead
+	// TODO: Random, but sure.
+	if (bit_count(scale & 0xFFF) <= 4) {
+		uint32_t best_scale = DmInt_DEFAULT_SCALE_PATTERN;
+		uint32_t best_score = 0;
+
+		for (size_t i = 0; i < 12; ++i) {
+			// Determine the score by checking the number of bits which are are set in both
+			uint32_t score = bit_count((DmInt_FALLBACK_SCALES[i] & scale) & 0xFFF);
+
+			if (score > best_score) {
+				best_scale = DmInt_FALLBACK_SCALES[i];
+				best_score = score;
+			}
+		}
+
+		scale = best_scale;
+	}
+
+	// Copy the second octave of the scale to the third, but only if the third octave is empty
+	if (!(scale & 0xFF000000)) {
+		scale |= (scale & 0xFFF000) << 12;
+	}
+
+	return scale;
+}
+
+static int DmPerformance_musicValueToMidi(struct DmSubChord chord, DmPlayModeFlags mode, uint16_t value) {
+	uint32_t offset = 0;
+
+	// Make sure the octave is not negative. If it is, transpose it up, and save the note offset.
+	// TODO: Not sure what this actually does
+	while (value >= 0xE000) {
+		value += 0x1000;
+		offset -= 12;
+	}
+
+	// Make sure that we can add 7 to the scale offset without overflowing. If we cannot, trim off the excess
+	// bytes and move the note offset one octave lower
+	uint16_t music_tmp = (value & 0x00F0) + 0x0070;
+	if (music_tmp & 0x0F00) {
+		value = (value & 0xFF0F) | (music_tmp & 0x00F0);
+		offset -= 12;
+	}
+
+	// Determine the root of the note
+	uint16_t root = 0;
+
+	if (mode & DmPlayMode_CHORD_ROOT) {
+		root = chord.chord_root;
+	} else if (mode & DmPlayMode_KEY_ROOT) {
+		Dm_report(DmLogLevel_ERROR, "DmPerformance: DmPlayMode_KEY_ROOT requested but we don't support it");
+		return -1;
+	}
+
+	// Now, to the meat of the routine: Determine the actual note position based on the chord and scale patterns!
+	if (!(mode & (DmPlayMode_CHORD_INTERVALS | DmPlayMode_SCALE_INTERVALS))) {
+		Dm_report(DmLogLevel_ERROR,
+		          "DmPerformance: DmPlayMode_CHORD_INTERVALS, nor DmPlayMode_SCALE_INTERVALS requested");
+		return -1;
+	}
+
+	// Make sure we actually have a scale to play from and fix it up (?)
+	// TODO: Why do we need to fixup the scale?
+	uint32_t scale_pattern = chord.scale_pattern ? chord.scale_pattern : DmInt_DEFAULT_SCALE_PATTERN;
+	scale_pattern = fixup_scale(scale_pattern, chord.scale_root);
+
+	uint32_t chord_pattern = chord.chord_pattern;
+	if (chord_pattern == 0) {
+		chord_pattern = 1;
+	}
+
+	uint16_t chord_position = (value & 0x0f00) >> 8;
+	uint16_t scale_position = (value & 0x0070) >> 4; // Make sure scale position < 8
+
+	int16_t note_accidentals = value & 0x000f;
+	if (note_accidentals > 8) {
+		note_accidentals -= 16;
+	}
+
+	int note_value = 0;
+	int note_offset = 0;
+	uint32_t note_pattern = 0;
+	uint16_t note_position = 0;
+
+	uint16_t root_octave = root % 12;
+	uint16_t chord_bits = bit_count(chord_pattern);
+
+	if ((mode & DmPlayMode_CHORD_INTERVALS) && scale_position == 0 && (chord_position < chord_bits)) {
+		note_offset = root + note_accidentals;
+		note_pattern = chord_pattern;
+		note_position = chord_position;
+	} else if ((mode & DmPlayMode_CHORD_INTERVALS) && (chord_position < chord_bits)) {
+		note_pattern = chord_pattern;
+		note_position = chord_position;
+
+		// Skip to the first note in the chord
+		if (note_pattern != 0) {
+			while ((note_pattern & 1) == 0) {
+				note_pattern >>= 1;
+				note_value += 1;
+			}
+		}
+
+		if (note_position > 0) {
+			do {
+				note_pattern >>= 1;
+				note_value += 1;
+
+				if (note_pattern & 1) {
+					note_position -= 1;
+				}
+
+				if (note_pattern == 0) {
+					note_value += note_position;
+					break;
+				}
+			} while (note_position > 0);
+		}
+
+		note_value += root_octave;
+		note_offset = note_accidentals + root - root_octave;
+
+		note_pattern = scale_pattern >> (note_value % 12);
+		note_position = scale_position;
+	} else if (mode & DmPlayMode_SCALE_INTERVALS) {
+		note_value = root_octave;
+		note_offset = note_accidentals + root - root_octave;
+
+		note_pattern = scale_pattern >> root_octave;
+		note_position = chord_position * 2 + scale_position;
+	} else {
+		return -1;
+	}
+
+	note_position += 1; // the actual position of the note (1-indexed)
+	for (; note_position > 0; note_pattern >>= 1) {
+		note_value += 1;
+
+		if (note_pattern & 1) {
+			note_position -= 1;
+		}
+
+		if (note_pattern == 0) {
+			note_value += note_position;
+			break;
+		}
+	}
+
+	note_value -= 1; // The loop counts one too many semitones (?)
+	note_value = note_value + note_offset;
+
+	// Take the note down an octave it the root is < 12
+	note_value += offset;
+	if (mode & DmPlayMode_CHORD_ROOT) {
+		note_value = ((short) ((value >> 12) & 0xF) * 12) + note_value - 12;
+	} else {
+		note_value = ((short) ((value >> 12) & 0xF) * 12) + note_value;
+	}
+
+	return note_value;
+}
+
+static void DmPerformance_playPattern(DmPerformance* slf, DmPattern* pttn) {
+	DmMessageQueue_clear(&slf->music_queue);
+	DmSynth_sendNoteOffEverything(&slf->synth);
+
+	int variation_lock[256];
+	for (size_t i = 0; i < 256; ++i) {
+		variation_lock[i] = -1;
+	}
+
+	for (size_t i = 0; i < pttn->parts.length; ++i) {
+		DmPartReference* pref = &pttn->parts.data[i];
+		DmPart* part = DmStyle_findPart(slf->style, pref);
+		if (part == NULL) {
+			Dm_report(DmLogLevel_ERROR, "DmPerformance: Part reference could not be resolved!");
+			continue;
+		}
+
+		// If the variation lock is nonzero, we need select the same variation for all parts
+		// with the same lock ID. Otherwise, we play a variation according to the settings.
+		int32_t variation = variation_lock[pref->variation_lock_id];
+		if (pref->variation_lock_id == 0 || variation < 0) {
+			if (pref->random_variation == 0) {
+				// This pattern is supposed to play its variations in sequence
+				// TODO(lmichaelis): This global counter is probably not correct. Replace it with one specific for each pattern
+				variation = (int32_t) slf->variation;
+			} else if (pref->random_variation == 1) {
+				// This pattern is supposed to play its variations in a random order
+				variation = rand();
+			} else {
+				Dm_report(DmLogLevel_ERROR,
+				          "DmPerformance: Unknown pattern variation selection: %d",
+				          pref->random_variation);
+			}
+
+			variation_lock[pref->variation_lock_id] = (int) variation;
+		}
+
+		variation = 1 << ((uint32_t) variation % DmPart_getValidVariationCount(part));
+
+		// Now we need to select the correct sub-chord to use for the pattern
+		// by comparing against the sub-chord level of the pattern. By default,
+		// we just use the first one.
+		struct DmSubChord chord = slf->chord.subchords[0];
+
+		for (size_t j = 0; j < slf->chord.subchord_count; ++j) {
+			if (slf->chord.subchords[j].levels & (1 << pref->subchord_level)) {
+				chord = slf->chord.subchords[j];
+				break;
+			}
+		}
+
+		// Now we are ready to create all the note on/note off messages
+		// for this pattern
+		for (size_t j = 0; j < part->note_count; ++j) {
+			DmNote note = part->notes[j];
+
+			// We ignore notes which do not correspond to the selected variation
+			if (!(note.variation & (uint32_t) variation)) {
+				continue;
+			}
+
+			DmPlayModeFlags flags =
+			    note.play_mode_flags == DmPlayMode_NONE ? part->play_mode_flags : note.play_mode_flags;
+			int midi = DmPerformance_musicValueToMidi(chord, flags, note.music_value);
+			if (midi < 0) {
+				// We were unable to convert the music value
+				Dm_report(DmLogLevel_WARN, "DmPerformance: Unable to convert music value %d to MIDI", note.music_value);
+				continue;
+			}
+
+			// TODO(lmichaelis): Randomize note start, velocity and duration
+			uint32_t note_start = DmPerformance_getNoteStartTime(note, part->time_signature);
+
+			DmMessage msg;
+			msg.type = DmMessage_NOTE;
+			msg.time = 0;
+
+			msg.note.on = true;
+			msg.note.note = (uint8_t) midi;
+			msg.note.velocity = note.velocity;
+			msg.note.channel = pref->logical_part_id;
+
+			DmMessageQueue_add(&slf->music_queue, &msg, slf->time + note_start);
+
+			msg.note.on = false;
+			msg.note.note = (uint8_t) midi;
+
+			DmMessageQueue_add(&slf->music_queue, &msg, slf->time + note_start + note.duration);
+		}
+
+		// TODO: Curves!
+	}
+
+	uint32_t pattern_length = DmPerformance_getMeasureLength(pttn->time_signature) * pttn->length_measures;
+	DmMessage msg;
+	msg.type = DmMessage_PATTERN;
+	msg.time = 0;
+
+	DmMessageQueue_add(&slf->music_queue, &msg, slf->time + pattern_length);
+
+	slf->variation += 1;
+}
+
+static void DmPerformance_handleCommandMessage(DmPerformance* slf, DmMessage_Command* msg) {
+	if (msg->command == DmCommand_GROOVE) {
+		slf->groove = msg->groove_level;
+		// TODO(lmichaelis): implement groove range randomization
+	} else {
+		Dm_report(DmLogLevel_WARN, "DmPerformance: Command message with command %d not implemented", msg->command);
+	}
+
+	DmPattern* pttn = DmPerformance_choosePattern(slf, msg->command);
+	if (pttn == NULL) {
+		Dm_report(DmLogLevel_WARN, "DmPerformance: No suitable pattern found. Silence ensues ...", msg->command);
+		return;
+	}
+
+	DmPerformance_playPattern(slf, pttn);
+}
+
+static void DmPerformance_handleMessage(DmPerformance* slf, DmMessage* msg) {
+	switch (msg->type) {
+	case DmMessage_SEGMENT: {
+		Dm_report(DmLogLevel_DEBUG, "time=%d msg=segment-change", slf->time);
+
+		// TODO(lmichaelis): The segment in this message might no longer be valid, since we
+		// have called `pop` on the queue but not kept a strong reference to the message!
+		DmSegment* sgt = msg->segment.segment;
+
+		DmMessageQueue_clear(&slf->control_queue);
+		DmMessageQueue_clear(&slf->music_queue);
+
+		// TODO(lmichaelis): properly handle loop offset and shit
+		for (size_t i = 0; i < sgt->messages.length; ++i) {
+			DmMessage* m = &sgt->messages.data[i];
+
+			if (msg->segment.loop == 0 && m->time < sgt->play_start) {
+				continue;
+			}
+
+			if (msg->segment.loop > 0 && (m->time < sgt->loop_start || m->time > sgt->loop_end)) {
+				continue;
+			}
+
+			DmMessageQueue_add(&slf->control_queue, m, slf->time + m->time);
+		}
+
+		DmSegment_release(slf->segment);
+		slf->segment = DmSegment_retain(sgt);
+
+		// TODO(lmichaelis): Properly handle repetition counts and so on
+		if (msg->segment.loop < sgt->repeats) {
+			DmMessage m;
+			m.type = DmMessage_SEGMENT;
+			m.time = 0;
+			m.segment.segment = sgt;
+			m.segment.loop = msg->segment.loop + 1;
+
+			DmMessageQueue_add(&slf->control_queue, &m, slf->time + slf->segment->length);
+		}
+		break;
+	}
+	case DmMessage_STYLE:
+		// TODO(lmichaelis): The style in this mesage might have alreay been de-allocated!
+		slf->style = DmStyle_retain(msg->style.style);
+		Dm_report(DmLogLevel_DEBUG, "time=%d msg=style-change", slf->time);
+		break;
+	case DmMessage_BAND:
+		// TODO(lmichaelis): The band in this mesage might have alreay been de-allocated!
+		DmSynth_sendBandUpdate(&slf->synth, msg->band.band);
+		Dm_report(DmLogLevel_DEBUG, "time=%d msg=band-change", slf->time);
+		break;
+	case DmMessage_TEMPO:
+		slf->tempo = msg->tempo.tempo;
+		Dm_report(DmLogLevel_DEBUG, "time=%d msg=tempo-change tempo=%f", slf->time, msg->tempo.tempo);
+		break;
+	case DmMessage_COMMAND:
+		DmPerformance_handleCommandMessage(slf, &msg->command);
+		Dm_report(DmLogLevel_DEBUG, "time=%d msg=command kind=%d", slf->time, msg->command.command);
+		break;
+	case DmMessage_CHORD:
+		slf->chord = msg->chord;
+		Dm_report(DmLogLevel_DEBUG, "time=%d msg=chord-change", slf->time);
+		break;
+	case DmMessage_PATTERN: {
+		DmPattern* pttn = DmPerformance_choosePattern(slf, DmCommand_GROOVE);
+		if (pttn != NULL) {
+			DmPerformance_playPattern(slf, pttn);
+		}
+		break;
+	}
+	case DmMessage_NOTE:
+		if (msg->note.on) {
+			DmSynth_sendNoteOn(&slf->synth, msg->note.channel, msg->note.note, msg->note.velocity);
+			Dm_report(DmLogLevel_DEBUG, "time=%d msg=note-on note=%d channel=%d velocity=%d", slf->time, (int) msg->note.note, msg->note.channel, msg->note.velocity);
+		} else {
+			DmSynth_sendNoteOff(&slf->synth, msg->note.channel, msg->note.note);
+			Dm_report(DmLogLevel_DEBUG, "time=%d msg=note-off note=%d channel=%d", slf->time, (int) msg->note.note, msg->note.channel);
+		}
+		break;
+	default:
+		Dm_report(DmLogLevel_INFO, "DmPerformance: Message type %d not implemented", msg->type);
+		break;
+	}
+}
+
+static uint32_t DmPerformance_getSampleCountFromDuration(DmPerformance* slf,
+                                                         uint32_t duration,
+                                                         uint32_t sample_rate,
+                                                         uint8_t channels) {
+	double pulses_per_second = DmInt_PULSES_PER_QUARTER_NOTE * (slf->tempo / 60.);
+	double pulses_per_sample = pulses_per_second / (sample_rate * channels);
+	return (uint32_t) (duration / pulses_per_sample);
+}
+
+static uint32_t
+DmPerformance_getDurationFromSampleCount(DmPerformance* slf, uint32_t samples, uint32_t sample_rate, uint8_t channels) {
+	double pulses_per_second = DmInt_PULSES_PER_QUARTER_NOTE * (slf->tempo / 60.);
+	double pulses_per_sample = pulses_per_second / (sample_rate * channels);
+	return (uint32_t) (pulses_per_sample * samples);
+}
+
+DmResult DmPerformance_renderPcm(DmPerformance* slf, void* buf, size_t len, DmRenderOptions opts) {
+	if (slf == NULL || buf == NULL) {
+		return DmResult_INVALID_ARGUMENT;
+	}
+
+	uint8_t const channels = opts & DmRender_STEREO ? 2 : 1;
+	uint32_t const sample_rate = 44100;
+
+	DmMessage msg_ctrl;
+	DmMessage msg_midi;
+
+	size_t sample = 0;
+	while (sample < len) {
+		bool ok_ctrl = DmMessageQueue_get(&slf->control_queue, &msg_ctrl);
+		bool ok_midi = DmMessageQueue_get(&slf->music_queue, &msg_midi);
+
+		if (!ok_ctrl && !ok_midi) {
+			// No more messages to process.
+			break;
+		}
+
+		if (ok_ctrl && ok_midi) {
+			// Both queues have a message, choose the one that happens
+			// earlier while preferring control messages
+			ok_ctrl = msg_ctrl.time <= msg_midi.time;
+			ok_midi = msg_midi.time < msg_ctrl.time;
+		}
+
+		DmMessage* msg = ok_ctrl ? &msg_ctrl : &msg_midi;
+		uint32_t time_offset = max(msg->time - slf->time, 0);
+		uint32_t offset_samples = DmPerformance_getSampleCountFromDuration(slf, time_offset, sample_rate, channels);
+
+		if (offset_samples > len - sample) {
+			// The next message does not fall into this render call (i.e. it happens after the number of
+			// samples left to process)
+			break;
+		}
+
+		// Eliminate crackling when rendering stereo audio. This is required so that we always output the
+		// same number of samples for each channel.
+		if ((opts & DmRender_STEREO)) {
+			offset_samples += offset_samples % 2;
+			time_offset = DmPerformance_getDurationFromSampleCount(slf, offset_samples, sample_rate, channels);
+		}
+
+		// Render the samples from now until the message occurs and advance the buffer pointer
+		// and time and sample counters.
+		if (offset_samples > 0) {
+			size_t bytes_rendered = DmSynth_render(&slf->synth, buf, offset_samples, opts);
+			buf = (uint8_t*) buf + bytes_rendered;
+		}
+
+		sample += offset_samples;
+		slf->time += time_offset;
+
+		// Handle the next message
+		if (ok_ctrl) {
+			DmMessageQueue_pop(&slf->control_queue);
+		} else {
+			DmMessageQueue_pop(&slf->music_queue);
+		}
+
+		DmPerformance_handleMessage(slf, msg);
+	}
+
+	// Render the remaining samples
+	uint32_t remaining_samples = (uint32_t) (len - sample);
+	(void) DmSynth_render(&slf->synth, buf, remaining_samples, opts);
+	slf->time += DmPerformance_getDurationFromSampleCount(slf, remaining_samples, sample_rate, channels);
+
+	return DmResult_SUCCESS;
+}

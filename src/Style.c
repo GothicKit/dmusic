@@ -63,6 +63,20 @@ DmResult DmStyle_download(DmStyle* slf, DmLoader* loader) {
 	return rv;
 }
 
+DmPart* DmStyle_findPart(DmStyle* slf, DmPartReference* pref) {
+	if (slf == NULL || pref == NULL) {
+		return NULL;
+	}
+
+	for (size_t i = 0; i < slf->parts.length; ++i) {
+		if (DmGuid_equals(&slf->parts.data[i].part_id, &pref->part_id)) {
+			return &slf->parts.data[i];
+		}
+	}
+
+	return NULL;
+}
+
 void DmPart_init(DmPart* slf) {
 	if (slf == NULL) {
 		Dm_report(DmLogLevel_ERROR, "DmPart: Internal error: DmPart_init called with a `NULL` pointer");
@@ -79,6 +93,21 @@ void DmPart_free(DmPart* slf) {
 	}
 
 	Dm_free(slf->notes);
+}
+
+uint32_t DmPart_getValidVariationCount(DmPart* slf) {
+	if (slf == NULL) {
+		return 0;
+	}
+
+	uint32_t i = 0;
+	for (; i < 32; ++i) {
+		if ((slf->variation_choices[i] & 0x0FFFFFFF) == 0) {
+			break;
+		}
+	}
+
+	return i;
 }
 
 void DmPartReference_init(DmPartReference* slf) {

@@ -5,6 +5,8 @@ set(CMAKE_C_STANDARD 11)
 
 option(DM_ENABLE_ASAN "DirectMusic: Enable sanitizers in debug builds." ON)
 
+add_subdirectory(vendor)
+
 list(APPEND _DM_SOURCE
         src/util/Array.h
         src/util/Tsf.c
@@ -26,6 +28,7 @@ list(APPEND _DM_SOURCE
         src/Logger.c
         src/Memory.c
         src/Message.c
+        src/Performance.c
         src/Riff.c
         src/Segment.c
         src/Style.c
@@ -42,6 +45,7 @@ target_include_directories(dmusic PRIVATE src)
 target_compile_definitions(dmusic PRIVATE DM_BUILD=1)
 target_compile_options(dmusic PRIVATE ${_DM_COMPILE_FLAGS})
 target_link_options(dmusic PRIVATE ${_DM_LINK_FLAGS})
+target_link_libraries(dmusic PRIVATE tsf)
 
 set_target_properties(dmusic PROPERTIES
         CXX_VISIBILITY_PRESET hidden

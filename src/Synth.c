@@ -35,8 +35,17 @@ void DmSynth_free(DmSynth* slf) {
 	DmSynth_freeChannels(slf);
 }
 
+// TODO(lmichaelis): Technically, we shoud change as little as possible to accomoate the new band.
+//                   For example: if only the pan of an instrument changes, we should also only update that
+//                   instead of reloading the entire instrument list and re-creating all TSFs.
+// See also: https://documentation.help/DirectMusic/usingbands.htm
 void DmSynth_sendBandUpdate(DmSynth* slf, DmBand* band) {
 	if (slf == NULL) {
+		return;
+	}
+
+	// Optimization: Don't re-alloc the entire thing if we're getting the same band
+	if (band == slf->band) {
 		return;
 	}
 
@@ -67,12 +76,7 @@ void DmSynth_sendBandUpdate(DmSynth* slf, DmBand* band) {
 
 		slf->channels[ins->channel] = tsf;
 
-		bool res = tsf_set_max_voices(tsf, 1);
-		if (!res) {
-			Dm_report(DmLogLevel_ERROR, "DmSynth: tsf_set_max_voices encountered an error.");
-		}
-
-		res = tsf_channel_set_bank_preset(tsf, 0, 0, 0);
+		bool res = tsf_channel_set_bank_preset(tsf, 0, 0, 0);
 		if (!res) {
 			Dm_report(DmLogLevel_ERROR, "DmSynth: tsf_channel_set_bank_preset encountered an error.");
 		}
@@ -108,7 +112,7 @@ void DmSynth_sendNoteOn(DmSynth* slf, uint32_t channel, uint8_t note, uint8_t ve
 		return;
 	}
 
-	bool res = tsf_channel_note_on(slf->channels[channel], 0, note, (float) velocity / 127.f);
+	bool res = tsf_channel_note_on(slf->channels[channel], 0, note, ((float) velocity + 0.5f) / 127.f);
 	if (!res) {
 		Dm_report(DmLogLevel_ERROR, "DmSynth: DmSynth_sendNoteOn encountered an error.");
 	}
@@ -119,7 +123,11 @@ void DmSynth_sendNoteOff(DmSynth* slf, uint32_t channel, uint8_t note) {
 		return;
 	}
 
-	tsf_channel_note_off(slf->channels[channel], 0, note);
+	if (slf->channels[channel] == NULL) {
+		return;
+	}
+
+	tsf_note_off(slf->channels[channel], 0, note);
 }
 
 void DmSynth_sendNoteOffAll(DmSynth* slf, uint32_t channel) {
@@ -127,10 +135,24 @@ void DmSynth_sendNoteOffAll(DmSynth* slf, uint32_t channel) {
 		return;
 	}
 
+	if (slf->channels[channel] == NULL) {
+		return;
+	}
+
 	tsf_channel_note_off_all(slf->channels[channel], 0);
 }
 
-void DmSynth_render(DmSynth* slf, void* buf, size_t len, DmRenderOptions fmt) {
+void DmSynth_sendNoteOffEverything(DmSynth* slf) {
+	if (slf == NULL) {
+		return;
+	}
+
+	for (uint32_t i = 0; i < slf->channel_count; ++i) {
+		DmSynth_sendNoteOffAll(slf, i);
+	}
+}
+
+size_t DmSynth_render(DmSynth* slf, void* buf, size_t len, DmRenderOptions fmt) {
 	for (size_t i = 0; i < slf->channel_count; ++i) {
 		if (slf->channels[i] == NULL) {
 			continue;
@@ -144,9 +166,11 @@ void DmSynth_render(DmSynth* slf, void* buf, size_t len, DmRenderOptions fmt) {
 		}
 
 		if (fmt & DmRender_FLOAT) {
-			tsf_render_float(slf->channels[i], buf, (int) len / channels, i != 0);
+			tsf_render_float(slf->channels[i], buf, (int) len / channels, true);
 		} else {
-			tsf_render_short(slf->channels[i], buf, (int) len / channels, i != 0);
+			tsf_render_short(slf->channels[i], buf, (int) len / channels, true);
 		}
 	}
+
+	return fmt & DmRender_FLOAT ? len * 4 : len * 2;
 }

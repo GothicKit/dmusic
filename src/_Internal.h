@@ -6,37 +6,11 @@
 #include "_Dls.h"
 #include "_Riff.h"
 #include "util/Array.h"
-#include "util/Tsf.h"
+#include <tsf.h>
 
 #include <stdatomic.h>
 #include <stdbool.h>
 #include <uchar.h>
-
-typedef enum DmPlaybackFlags {
-	DmPlayback_REFTIME = 1 << 6,
-	DmPlayback_SECONDARY = 1 << 7,
-	DmPlayback_QUEUE = 1 << 8,
-	DmPlayback_CONTROL = 1 << 9,
-	DmPlayback_AFTER_PREPARE_TIME = 1 << 10,
-	DmPlayback_GRID = 1 << 11,
-	DmPlayback_BEAT = 1 << 12,
-	DmPlayback_MEASURE = 1 << 13,
-	DmPlayback_DEFAULT = 1 << 14,
-	DmPlayback_NOINVALIDATE = 1 << 15,
-	DmPlayback_ALIGN = 1 << 16,
-	DmPlayback_VALID_START_BEAT = 1 << 17,
-	DmPlayback_VALID_START_GRID = 1 << 18,
-	DmPlayback_VALID_START_TICK = 1 << 19,
-	DmPlayback_AUTOTRANSITION = 1 << 20,
-	DmPlayback_AFTER_QUEUE_TIME = 1 << 21,
-	DmPlayback_AFTER_LATENCY_TIME = 1 << 22,
-	DmPlayback_SEGMENT_END = 1 << 23,
-	DmPlayback_MARKER = 1 << 24,
-	DmPlayback_TIMESIG_ALWAYS = 1 << 25,
-	DmPlayback_USE_AUDIOPATH = 1 << 26,
-	DmPlayback_VALID_START_MEASURE = 1 << 27,
-	DmPlayback_INVALIDATE_PRI = 1 << 28
-} DmPlaybackFlags;
 
 typedef enum DmResolveFlags {
 	DmResolve_AFTER_PREPARE_TIME = DmPlayback_AFTER_PREPARE_TIME,
@@ -218,11 +192,14 @@ typedef struct DmStyle {
 } DmStyle;
 
 typedef enum DmMessageType {
-	DmMessage_COMMAND,
+	DmMessage_SEGMENT = 0,
+	DmMessage_STYLE,
+	DmMessage_BAND,
 	DmMessage_TEMPO,
 	DmMessage_CHORD,
-	DmMessage_BAND,
-	DmMessage_STYLE,
+	DmMessage_COMMAND,
+	DmMessage_PATTERN,
+	DmMessage_NOTE,
 } DmMessageType;
 
 typedef struct DmMessage_Tempo {
@@ -252,7 +229,7 @@ typedef struct DmMessage_Chord {
 	bool silent;
 
 	uint32_t subchord_count;
-	struct {
+	struct DmSubChord {
 		uint32_t chord_pattern;
 		uint32_t scale_pattern;
 		uint32_t inversion_points;
@@ -275,6 +252,23 @@ typedef struct DmMessage_Style {
 	DmStyle* style;
 } DmMessage_Style;
 
+typedef struct DmMessage_SegmentChange {
+	DmMessageType type;
+	uint32_t time;
+	DmSegment* segment;
+	uint32_t loop;
+} DmMessage_SegmentChange;
+
+typedef struct DmMessage_Note {
+	DmMessageType type;
+	uint32_t time;
+
+	bool on;
+	uint8_t note;
+	uint8_t velocity;
+	uint32_t channel;
+} DmMessage_Note;
+
 typedef union DmMessage {
 	struct {
 		DmMessageType type;
@@ -286,6 +280,8 @@ typedef union DmMessage {
 	DmMessage_Chord chord;
 	DmMessage_Band band;
 	DmMessage_Style style;
+	DmMessage_SegmentChange segment;
+	DmMessage_Note note;
 } DmMessage;
 
 DmArray_DEFINE(DmMessageList, DmMessage);
@@ -326,6 +322,39 @@ struct DmSegment {
 	DmMessageList messages;
 };
 
+typedef struct DmMessageQueueItem {
+	struct DmMessageQueueItem* next;
+	DmMessage data;
+} DmMessageQueueItem;
+
+typedef struct DmMessageQueue {
+	size_t queue_length;
+	size_t queue_capacity;
+	DmMessageQueueItem** queue;
+
+	DmMessageQueueItem* free;
+	struct DmMessageQueueBlock {
+		struct DmMessageQueueBlock* next;
+	} *blocks;
+} DmMessageQueue;
+
+struct DmPerformance {
+	_Atomic size_t reference_count;
+
+	DmMessageQueue control_queue;
+	DmMessageQueue music_queue;
+
+	DmSegment* segment;
+	DmStyle* style;
+	DmSynth synth;
+
+	uint32_t variation;
+	uint32_t time;
+	uint32_t groove;
+	double tempo;
+	DmMessage_Chord chord;
+};
+
 DMINT void* Dm_alloc(size_t len);
 DMINT void Dm_free(void* ptr);
 DMINT void Dm_report(DmLogLevel lvl, char const* fmt, ...);
@@ -339,8 +368,14 @@ DMINT DmResult DmLoader_getDownloadableSound(DmLoader* slf, DmReference const* r
 DMINT DmResult DmSegment_create(DmSegment** slf);
 DMINT DmResult DmSegment_parse(DmSegment* slf, void* buf, size_t len);
 
-DMINT void DmMessage_copy(DmMessage* slf, DmMessage* cpy);
+DMINT void DmMessage_copy(DmMessage* slf, DmMessage* cpy, uint32_t time);
 DMINT void DmMessage_free(DmMessage* slf);
+DMINT DmResult DmMessageQueue_init(DmMessageQueue* slf);
+DMINT void DmMessageQueue_free(DmMessageQueue* slf);
+DMINT void DmMessageQueue_add(DmMessageQueue* slf, DmMessage* msg, uint32_t time);
+DMINT bool DmMessageQueue_get(DmMessageQueue* slf, DmMessage* msg);
+DMINT void DmMessageQueue_pop(DmMessageQueue* slf);
+DMINT void DmMessageQueue_clear(DmMessageQueue* slf);
 
 DMINT DmResult DmBand_create(DmBand** slf);
 DMINT DmBand* DmBand_retain(DmBand* slf);
@@ -354,9 +389,11 @@ DMINT DmStyle* DmStyle_retain(DmStyle* slf);
 DMINT void DmStyle_release(DmStyle* slf);
 DMINT DmResult DmStyle_parse(DmStyle* slf, void* buf, size_t len);
 DMINT DmResult DmStyle_download(DmStyle* slf, DmLoader* loader);
+DMINT DmPart* DmStyle_findPart(DmStyle* slf, DmPartReference* pref);
 
 DMINT void DmPart_init(DmPart* slf);
 DMINT void DmPart_free(DmPart* slf);
+DMINT uint32_t DmPart_getValidVariationCount(DmPart* slf);
 
 DMINT void DmPartReference_init(DmPartReference* slf);
 DMINT void DmPartReference_free(DmPartReference* slf);
@@ -371,4 +408,5 @@ DMINT void DmSynth_sendControl(DmSynth* slf, uint32_t channel, uint8_t control, 
 DMINT void DmSynth_sendNoteOn(DmSynth* slf, uint32_t channel, uint8_t note, uint8_t velocity);
 DMINT void DmSynth_sendNoteOff(DmSynth* slf, uint32_t channel, uint8_t note);
 DMINT void DmSynth_sendNoteOffAll(DmSynth* slf, uint32_t channel);
-DMINT void DmSynth_render(DmSynth* slf, void* buf, size_t len, DmRenderOptions fmt);
+DMINT void DmSynth_sendNoteOffEverything(DmSynth* slf);
+DMINT size_t DmSynth_render(DmSynth* slf, void* buf, size_t len, DmRenderOptions fmt);
