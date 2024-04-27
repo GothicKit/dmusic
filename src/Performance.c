@@ -4,7 +4,7 @@
 #include <stdlib.h>
 #include <math.h>
 
-static uint32_t max(uint32_t a, uint32_t b) {
+static int32_t max(int32_t a, int32_t b) {
 	return a > b ? a : b;
 }
 
@@ -724,7 +724,7 @@ DmResult DmPerformance_renderPcm(DmPerformance* slf, void* buf, size_t len, DmRe
 		}
 
 		DmMessage* msg = ok_ctrl ? &msg_ctrl : &msg_midi;
-		uint32_t time_offset = max(msg->time - slf->time, 0);
+		uint32_t time_offset = (uint32_t) max((int) msg->time - (int) slf->time, 0);
 		uint32_t offset_samples = DmPerformance_getSampleCountFromDuration(slf, time_offset, sample_rate, channels);
 
 		if (offset_samples > len - sample) {
