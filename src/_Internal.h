@@ -128,6 +128,36 @@ typedef struct DmNote {
 	DmPlayModeFlags play_mode_flags;
 } DmNote;
 
+typedef enum DmCurveType {
+	DmCurveType_PITCH_BEND = 0x03,
+	DmCurveType_CONTROL_CHANGE = 0x04,
+	DmCurveType_MONO_AFTERTOUCH = 0x05,
+	DmCurveType_POLY_AFTERTOUCH = 0x06,
+} DmCurveType;
+
+typedef enum DmCurveShape {
+	DmCurveShape_LINEAR = 0,
+	DmCurveShape_INSTANT = 1,
+	DmCurveShape_EXP = 2,
+	DmCurveShape_LOG = 3,
+	DmCurveShape_SINE = 4
+} DmCurveShape;
+
+typedef struct DmCurve {
+	uint32_t grid_start;
+	uint32_t variation;
+	uint32_t duration;
+	uint32_t reset_duration;
+	short time_offset;
+	short start_value;
+	short end_value;
+	short reset_value;
+	DmCurveType event_type;
+	DmCurveShape curve_shape;
+	uint8_t cc_data;
+	uint8_t flags;
+} DmCurve;
+
 typedef struct DmPart {
 	DmUnfo info;
 
@@ -142,6 +172,9 @@ typedef struct DmPart {
 
 	uint32_t note_count;
 	DmNote* notes;
+
+	uint32_t curve_count;
+	DmCurve* curves;
 } DmPart;
 
 typedef struct DmPartReference {
@@ -199,6 +232,7 @@ typedef enum DmMessageType {
 	DmMessage_CHORD,
 	DmMessage_COMMAND,
 	DmMessage_PATTERN,
+	DmMessage_CONTROL,
 	DmMessage_NOTE,
 } DmMessageType;
 
@@ -269,6 +303,15 @@ typedef struct DmMessage_Note {
 	uint32_t channel;
 } DmMessage_Note;
 
+typedef struct DmMessage_Control {
+	DmMessageType type;
+	uint32_t time;
+
+	uint8_t control;
+	float value;
+	uint32_t channel;
+} DmMessage_Control;
+
 typedef union DmMessage {
 	struct {
 		DmMessageType type;
@@ -282,6 +325,7 @@ typedef union DmMessage {
 	DmMessage_Style style;
 	DmMessage_SegmentChange segment;
 	DmMessage_Note note;
+	DmMessage_Control control;
 } DmMessage;
 
 DmArray_DEFINE(DmMessageList, DmMessage);
@@ -404,7 +448,7 @@ DMINT void DmPattern_free(DmPattern* slf);
 DMINT void DmSynth_init(DmSynth* slf);
 DMINT void DmSynth_free(DmSynth* slf);
 DMINT void DmSynth_sendBandUpdate(DmSynth* slf, DmBand* band);
-DMINT void DmSynth_sendControl(DmSynth* slf, uint32_t channel, uint8_t control, int32_t value);
+DMINT void DmSynth_sendControl(DmSynth* slf, uint32_t channel, uint8_t control, float value);
 DMINT void DmSynth_sendNoteOn(DmSynth* slf, uint32_t channel, uint8_t note, uint8_t velocity);
 DMINT void DmSynth_sendNoteOff(DmSynth* slf, uint32_t channel, uint8_t note);
 DMINT void DmSynth_sendNoteOffAll(DmSynth* slf, uint32_t channel);

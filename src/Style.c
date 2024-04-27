@@ -93,6 +93,7 @@ void DmPart_free(DmPart* slf) {
 	}
 
 	Dm_free(slf->notes);
+	Dm_free(slf->curves);
 }
 
 uint32_t DmPart_getValidVariationCount(DmPart* slf) {

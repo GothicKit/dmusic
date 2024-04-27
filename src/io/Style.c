@@ -93,6 +93,48 @@ static DmResult DmStyle_parsePartNotes(DmPart* part, DmRiff* rif) {
 	return DmResult_SUCCESS;
 }
 
+static DmResult DmStyle_parsePartCurves(DmPart* part, DmRiff* rif) {
+	uint32_t item_size = 0;
+	DmRiff_readDword(rif, &item_size);
+
+	part->curve_count = (rif->len - rif->pos) / item_size;
+	part->curves = Dm_alloc(part->curve_count * sizeof(DmCurve));
+
+	if (part->curves == NULL) {
+		return DmResult_MEMORY_EXHAUSTED;
+	}
+
+	for (uint32_t i = 0; i < part->curve_count; ++i) {
+		uint32_t end_position = rif->pos + item_size;
+
+		DmRiff_readDword(rif, &part->curves[i].grid_start);
+		DmRiff_readDword(rif, &part->curves[i].variation);
+		DmRiff_readDword(rif, &part->curves[i].duration);
+		DmRiff_readDword(rif, &part->curves[i].reset_duration);
+		DmRiff_readShort(rif, &part->curves[i].time_offset);
+		DmRiff_readShort(rif, &part->curves[i].start_value);
+		DmRiff_readShort(rif, &part->curves[i].end_value);
+		DmRiff_readShort(rif, &part->curves[i].reset_value);
+
+		uint8_t tmp;
+		DmRiff_readByte(rif, &tmp);
+		part->curves[i].event_type = tmp;
+
+		DmRiff_readByte(rif, &tmp);
+		part->curves[i].curve_shape = tmp;
+
+		DmRiff_readByte(rif, &tmp);
+		part->curves[i].cc_data = tmp;
+
+		DmRiff_readByte(rif, &tmp);
+		part->curves[i].flags = tmp;
+
+		rif->pos = end_position;
+	}
+
+	return DmResult_SUCCESS;
+}
+
 static DmResult DmStyle_parsePart(DmPart* slf, DmRiff* rif) {
 	DmRiff cnk;
 	while (DmRiff_readChunk(rif, &cnk)) {
@@ -117,6 +159,11 @@ static DmResult DmStyle_parsePart(DmPart* slf, DmRiff* rif) {
 			DmUnfo_parse(&slf->info, &cnk);
 		} else if (DmRiff_is(&cnk, DM_FOURCC_NOTE, 0)) {
 			DmResult rv = DmStyle_parsePartNotes(slf, &cnk);
+			if (rv != DmResult_SUCCESS) {
+				return rv;
+			}
+		} else if (DmRiff_is(&cnk, DM_FOURCC_CRVE, 0)) {
+			DmResult rv = DmStyle_parsePartCurves(slf, &cnk);
 			if (rv != DmResult_SUCCESS) {
 				return rv;
 			}

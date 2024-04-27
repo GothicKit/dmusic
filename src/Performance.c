@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT-Modern-Variant
 #include "_Internal.h"
 #include <stdlib.h>
+#include <math.h>
 
 static uint32_t max(uint32_t a, uint32_t b) {
 	return a > b ? a : b;
@@ -201,6 +202,13 @@ static uint32_t DmPerformance_getNoteStartTime(DmNote note, DmTimeSignature sig)
 	return (uint32_t) note.time_offset +
 	    ((note.grid_start / sig.grids_per_beat) * ((DMUS_PPQ * 4) / sig.beat) +
 	     (note.grid_start % sig.grids_per_beat) * (((DMUS_PPQ * 4) / sig.beat) / sig.grids_per_beat));
+}
+
+static uint32_t DmPerformance_getCurveStartTime(DmCurve curve, DmTimeSignature sig) {
+	const uint32_t DMUS_PPQ = DmInt_PULSES_PER_QUARTER_NOTE;
+	return (uint32_t) curve.time_offset +
+		   ((curve.grid_start / sig.grids_per_beat) * ((DMUS_PPQ * 4) / sig.beat) +
+			(curve.grid_start % sig.grids_per_beat) * (((DMUS_PPQ * 4) / sig.beat) / sig.grids_per_beat));
 }
 
 static uint32_t DmInt_DEFAULT_SCALE_PATTERN = 0xab5ab5;
@@ -404,6 +412,12 @@ static int DmPerformance_musicValueToMidi(struct DmSubChord chord, DmPlayModeFla
 	return note_value;
 }
 
+#define DmInt_CURVE_SPACING 5
+
+static float lerp(float x, float start, float end) {
+	return (1 - x) * start + x * end;
+}
+
 static void DmPerformance_playPattern(DmPerformance* slf, DmPattern* pttn) {
 	DmMessageQueue_clear(&slf->music_queue);
 	DmSynth_sendNoteOffEverything(&slf->synth);
@@ -494,7 +508,58 @@ static void DmPerformance_playPattern(DmPerformance* slf, DmPattern* pttn) {
 			DmMessageQueue_add(&slf->music_queue, &msg, slf->time + note_start + note.duration);
 		}
 
-		// TODO: Curves!
+		for (size_t j = 0; j < part->curve_count; ++j) {
+			DmCurve curve = part->curves[j];
+
+			// We ignore notes which do not correspond to the selected variation
+			if (!(curve.variation & (uint32_t) variation)) {
+				continue;
+			}
+
+			// TODO(lmichaelis): Implement the other curve types!
+			if (curve.event_type != DmCurveType_CONTROL_CHANGE) {
+				Dm_report(DmLogLevel_ERROR, "DmPerformance: Curve type %d is not supported", curve.event_type);
+				continue;
+			}
+
+			uint32_t start_time = DmPerformance_getCurveStartTime(curve, part->time_signature);
+			float start = (float)curve.start_value / 127.f;
+			float end = (float)curve.end_value / 127.f;
+
+			// TODO(lmichaelis): Check whether this is actually correct!
+			for (uint32_t k = 0; k < (curve.duration / DmInt_CURVE_SPACING); ++k) {
+				uint32_t offset = k * DmInt_CURVE_SPACING;
+				float phase = (float) offset / (float) curve.duration;
+
+				float value = 0;
+				switch (curve.curve_shape) {
+				case DmCurveShape_LINEAR:
+					value = lerp(phase, start, end);
+					break;
+				case DmCurveShape_INSTANT:
+					value = end;
+					break;
+				case DmCurveShape_EXP:
+					value = lerp(powf(phase, 4), start, end);
+					break;
+				case DmCurveShape_LOG:
+					value = lerp(sqrtf(phase), start, end);
+					break;
+				case DmCurveShape_SINE:
+					value = lerp((sinf((phase - 0.5f) * (float)M_PI ) + 1) * 0.5f, start, end);
+					break;
+				}
+
+				DmMessage msg;
+				msg.type = DmMessage_CONTROL;
+				msg.time = 0;
+				msg.control.control = curve.cc_data;
+				msg.control.channel = pref->logical_part_id;
+				msg.control.value = value;
+
+				DmMessageQueue_add(&slf->music_queue, &msg, slf->time + start_time + offset);
+			}
+		}
 	}
 
 	uint32_t pattern_length = DmPerformance_getMeasureLength(pttn->time_signature) * pttn->length_measures;
@@ -603,6 +668,10 @@ static void DmPerformance_handleMessage(DmPerformance* slf, DmMessage* msg) {
 			DmSynth_sendNoteOff(&slf->synth, msg->note.channel, msg->note.note);
 			Dm_report(DmLogLevel_DEBUG, "time=%d msg=note-off note=%d channel=%d", slf->time, (int) msg->note.note, msg->note.channel);
 		}
+		break;
+	case DmMessage_CONTROL:
+		DmSynth_sendControl(&slf->synth, msg->control.channel, msg->control.control, msg->control.value);
+		Dm_report(DmLogLevel_DEBUG, "time=%d msg=control channel=%d control=%d value=%f", slf->time, msg->control.channel, msg->control.control, msg->control.control);
 		break;
 	default:
 		Dm_report(DmLogLevel_INFO, "DmPerformance: Message type %d not implemented", msg->type);

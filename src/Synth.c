@@ -96,14 +96,21 @@ void DmSynth_sendBandUpdate(DmSynth* slf, DmBand* band) {
 	}
 }
 
-void DmSynth_sendControl(DmSynth* slf, uint32_t channel, uint8_t control, int32_t value) {
+#define DmInt_MIDI_CC_VOLUME 7
+#define DmInt_MIDI_CC_PAN 10
+#define DmInt_MIDI_CC_EXPRESSION 11
+
+void DmSynth_sendControl(DmSynth* slf, uint32_t channel, uint8_t control, float value) {
 	if (slf == NULL || channel >= slf->channel_count) {
 		return;
 	}
 
-	bool res = tsf_channel_midi_control(slf->channels[channel], 0, control, value);
-	if (!res) {
-		Dm_report(DmLogLevel_ERROR, "DmSynth: DmSynth_sendControl encountered an error.");
+	if (control == DmInt_MIDI_CC_VOLUME || control == DmInt_MIDI_CC_EXPRESSION) {
+		tsf_channel_set_volume(slf->channels[channel], 0, value);
+	}else if (control == DmInt_MIDI_CC_PAN) {
+		tsf_channel_set_pan(slf->channels[channel], 0, value);
+	} else {
+		Dm_report(DmLogLevel_WARN, "DmSynth: Control change %d is unknown.", control);
 	}
 }
 

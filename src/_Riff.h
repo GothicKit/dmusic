@@ -66,6 +66,7 @@
 #define DM_FOURCC_PART DM_FOURCC('p', 'a', 'r', 't')
 #define DM_FOURCC_PRTH DM_FOURCC('p', 'r', 't', 'h')
 #define DM_FOURCC_NOTE DM_FOURCC('n', 'o', 't', 'e')
+#define DM_FOURCC_CRVE DM_FOURCC('c', 'r', 'v', 'e')
 #define DM_FOURCC_PTTN DM_FOURCC('p', 't', 't', 'n')
 #define DM_FOURCC_PTNH DM_FOURCC('p', 't', 'n', 'h')
 #define DM_FOURCC_RHTM DM_FOURCC('r', 'h', 't', 'm')
