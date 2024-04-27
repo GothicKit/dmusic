@@ -655,6 +655,8 @@ static void DmPerformance_handleMessage(DmPerformance* slf, DmMessage* msg) {
 		break;
 	case DmMessage_PATTERN: {
 		DmPattern* pttn = DmPerformance_choosePattern(slf, DmCommand_GROOVE);
+		Dm_report(DmLogLevel_DEBUG, "time=%d msg=pattern-change", slf->time);
+
 		if (pttn != NULL) {
 			DmPerformance_playPattern(slf, pttn);
 		}
