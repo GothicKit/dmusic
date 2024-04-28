@@ -86,6 +86,14 @@ static uint32_t DmPerformance_getMeasureLength(DmTimeSignature sig) {
 	return v;
 }
 
+static double DmPerformance_getPulsesPerSample(DmTimeSignature time_signature, double beats_per_minute, uint32_t sample_rate) {
+	uint32_t pulses_per_beat = DmPerformance_getBeatLength(time_signature); // unit: music-time per beat
+	double beats_per_second = beats_per_minute / 60; // unit: 1 per second
+	double pulses_per_second = pulses_per_beat * beats_per_second; // unit: music-time per second
+	double pulses_per_sample = pulses_per_second / sample_rate; // unit: music-time per sample
+	return pulses_per_sample;
+}
+
 // See https://documentation.help/DirectMusic/dmussegfflags.htm
 static uint32_t DmPerformance_getStartTime(DmPerformance* slf, DmPlaybackFlags flags) {
 	if (flags & DmPlayback_BEAT) {
@@ -827,16 +835,14 @@ static uint32_t DmPerformance_getSampleCountFromDuration(DmPerformance* slf,
                                                          uint32_t duration,
                                                          uint32_t sample_rate,
                                                          uint8_t channels) {
-	double pulses_per_second = DmInt_PULSES_PER_QUARTER_NOTE * (slf->tempo / 60.);
-	double pulses_per_sample = pulses_per_second / (sample_rate * channels);
-	return (uint32_t) (duration / pulses_per_sample);
+	double pulses_per_sample = DmPerformance_getPulsesPerSample(slf->time_signature, slf->tempo, sample_rate);
+	return (uint32_t) (duration / pulses_per_sample / channels);
 }
 
 static uint32_t
 DmPerformance_getDurationFromSampleCount(DmPerformance* slf, uint32_t samples, uint32_t sample_rate, uint8_t channels) {
-	double pulses_per_second = DmInt_PULSES_PER_QUARTER_NOTE * (slf->tempo / 60.);
-	double pulses_per_sample = pulses_per_second / (sample_rate * channels);
-	return (uint32_t) (pulses_per_sample * samples);
+	double pulses_per_sample = DmPerformance_getPulsesPerSample(slf->time_signature, slf->tempo, sample_rate);
+	return (uint32_t) ((pulses_per_sample / channels) * samples);
 }
 
 DmResult DmPerformance_renderPcm(DmPerformance* slf, void* buf, size_t len, DmRenderOptions opts) {
