@@ -690,7 +690,7 @@ static void DmPerformance_handleMessage(DmPerformance* slf, DmMessage* msg) {
 		Dm_report(DmLogLevel_DEBUG, "time=%d msg=pattern-change", slf->time);
 
 		if (pttn != NULL) {
-			// DmPerformance_playPattern(slf, pttn);
+			DmPerformance_playPattern(slf, pttn);
 		}
 		break;
 	}
