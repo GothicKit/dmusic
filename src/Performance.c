@@ -415,6 +415,7 @@ static float lerp(float x, float start, float end) {
 }
 
 static void DmPerformance_playPattern(DmPerformance* slf, DmPattern* pttn) {
+	DmSynth_reset(&slf->synth);
 	DmMessageQueue_clear(&slf->music_queue);
 	DmSynth_sendNoteOffEverything(&slf->synth);
 
@@ -520,12 +521,14 @@ static void DmPerformance_playPattern(DmPerformance* slf, DmPattern* pttn) {
 				continue;
 			}
 
-			uint32_t start_time = DmPerformance_getTimeOffset(curve.grid_start, curve.time_offset, part->time_signature);
+			uint32_t start_time =
+			    DmPerformance_getTimeOffset(curve.grid_start, curve.time_offset, part->time_signature);
 			uint32_t duration = curve.duration / 2;
 
-			 int16_t start = curve.start_value;
-			 int16_t end = curve.end_value;
+			int16_t start = curve.start_value;
+			int16_t end = curve.end_value;
 
+			float prev_value;
 			// TODO(lmichaelis): Check whether this is actually correct!
 			for (uint32_t k = 0; k < (duration / DmInt_CURVE_SPACING); ++k) {
 				uint32_t offset = k * DmInt_CURVE_SPACING;
@@ -546,7 +549,7 @@ static void DmPerformance_playPattern(DmPerformance* slf, DmPattern* pttn) {
 					value = lerp(sqrtf(phase), start, end);
 					break;
 				case DmCurveShape_SINE:
-					value = lerp((sinf((phase - 0.5f) * (float)M_PI ) + 1) * 0.5f, start, end);
+					value = lerp((sinf((phase - 0.5f) * (float) M_PI) + 1) * 0.5f, start, end);
 					break;
 				}
 
@@ -558,16 +561,32 @@ static void DmPerformance_playPattern(DmPerformance* slf, DmPattern* pttn) {
 					msg.control.control = curve.cc_data;
 					msg.control.channel = pref->logical_part_id;
 					msg.control.value = value / 127.f;
+					msg.control.reset = curve.flags & DmCurveFlags_RESET;
+					msg.control.reset_value = curve.reset_value / 127.f;
+
+					// Optimization: Don't emit a message if the value is the same as the previous one.
+					if (msg.control.value == prev_value) {
+						continue;
+					}
+
+					prev_value = msg.control.value;
 				} else if (curve.event_type == DmCurveType_PITCH_BEND) {
 					msg.type = DmMessage_PITCH_BEND;
 					msg.pitch_bend.value = (int) value;
 					msg.pitch_bend.channel = pref->logical_part_id;
+					msg.pitch_bend.reset = curve.flags & DmCurveFlags_RESET;
+					msg.pitch_bend.reset_value = (int) value;
+
+					// Optimization: Don't emit a message if the value is the same as the previous one.
+					if (msg.pitch_bend.value == (uint16_t) prev_value) {
+						continue;
+					}
+
+					prev_value = (float) msg.pitch_bend.value;
 				}
 
 				DmMessageQueue_add(&slf->music_queue, &msg, slf->time + start_time + offset);
 			}
-
-			// TODO: Reset messages
 		}
 	}
 
@@ -689,6 +708,10 @@ static void DmPerformance_handleMessage(DmPerformance* slf, DmMessage* msg) {
 		break;
 	case DmMessage_CONTROL:
 		DmSynth_sendControl(&slf->synth, msg->control.channel, msg->control.control, msg->control.value);
+		if (msg->control.reset) {
+			DmSynth_sendControlReset(&slf->synth, msg->control.channel, msg->control.control, msg->control.reset_value);
+		}
+
 		Dm_report(DmLogLevel_DEBUG,
 		          "time=%d msg=control channel=%d control=%d value=%f",
 		          slf->time,
@@ -698,7 +721,15 @@ static void DmPerformance_handleMessage(DmPerformance* slf, DmMessage* msg) {
 		break;
 	case DmMessage_PITCH_BEND:
 		DmSynth_sendPitchBend(&slf->synth, msg->pitch_bend.channel, msg->pitch_bend.value);
-		Dm_report(DmLogLevel_DEBUG, "time=%d channel=%d msg=pitch-bend value=%d", slf->time, msg->pitch_bend.channel, msg->pitch_bend.value);
+		if (msg->pitch_bend.reset) {
+			DmSynth_sendPitchBendReset(&slf->synth, msg->pitch_bend.channel, msg->pitch_bend.reset_value);
+		}
+
+		Dm_report(DmLogLevel_DEBUG,
+		          "time=%d channel=%d msg=pitch-bend value=%d",
+		          slf->time,
+		          msg->pitch_bend.channel,
+		          msg->pitch_bend.value);
 		break;
 	default:
 		Dm_report(DmLogLevel_INFO, "DmPerformance: Message type %d not implemented", msg->type);

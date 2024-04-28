@@ -143,6 +143,10 @@ typedef enum DmCurveShape {
 	DmCurveShape_SINE = 4
 } DmCurveShape;
 
+typedef enum DmCurveFlags {
+	DmCurveFlags_RESET = 1,
+} DmCurveFlags;
+
 typedef struct DmCurve {
 	uint32_t grid_start;
 	uint32_t variation;
@@ -311,6 +315,9 @@ typedef struct DmMessage_Control {
 	uint8_t control;
 	float value;
 	uint32_t channel;
+
+	bool reset;
+	float reset_value;
 } DmMessage_Control;
 
 typedef struct DmMessage_PitchBend {
@@ -319,6 +326,9 @@ typedef struct DmMessage_PitchBend {
 
 	uint32_t channel;
 	int value;
+
+	bool reset;
+	int reset_value;
 } DmMessage_PitchBend;
 
 typedef union DmMessage {
@@ -340,9 +350,16 @@ typedef union DmMessage {
 
 DmArray_DEFINE(DmMessageList, DmMessage);
 
+typedef struct DmSynthChannel {
+	tsf* synth;
+	float volume_reset;
+	float pan_reset;
+	int pitch_bend_reset;
+} DmSynthChannel;
+
 typedef struct DmSynth {
 	size_t channel_count;
-	tsf** channels;
+	DmSynthChannel* channels;
 	DmBand* band;
 } DmSynth;
 
@@ -407,6 +424,9 @@ struct DmPerformance {
 	uint32_t groove;
 	double tempo;
 	DmMessage_Chord chord;
+
+	int pitch_bend_reset;
+	float volume_reset;
 };
 
 DMINT void* Dm_alloc(size_t len);
@@ -457,9 +477,13 @@ DMINT void DmPattern_free(DmPattern* slf);
 
 DMINT void DmSynth_init(DmSynth* slf);
 DMINT void DmSynth_free(DmSynth* slf);
+DMINT void DmSynth_reset(DmSynth* slf);
+
 DMINT void DmSynth_sendBandUpdate(DmSynth* slf, DmBand* band);
 DMINT void DmSynth_sendControl(DmSynth* slf, uint32_t channel, uint8_t control, float value);
+DMINT void DmSynth_sendControlReset(DmSynth* slf, uint32_t channel, uint8_t control, float reset);
 DMINT void DmSynth_sendPitchBend(DmSynth* slf, uint32_t channel, int bend);
+DMINT void DmSynth_sendPitchBendReset(DmSynth* slf, uint32_t channel, int reset);
 DMINT void DmSynth_sendNoteOn(DmSynth* slf, uint32_t channel, uint8_t note, uint8_t velocity);
 DMINT void DmSynth_sendNoteOff(DmSynth* slf, uint32_t channel, uint8_t note);
 DMINT void DmSynth_sendNoteOffAll(DmSynth* slf, uint32_t channel);

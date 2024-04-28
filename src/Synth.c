@@ -18,7 +18,7 @@ void DmSynth_init(DmSynth* slf) {
 
 static void DmSynth_freeChannels(DmSynth* slf) {
 	for (size_t i = 0; i < slf->channel_count; ++i) {
-		tsf_close(slf->channels[i]);
+		tsf_close(slf->channels[i].synth);
 	}
 
 	Dm_free(slf->channels);
@@ -33,6 +33,22 @@ void DmSynth_free(DmSynth* slf) {
 	}
 
 	DmSynth_freeChannels(slf);
+}
+
+void DmSynth_reset(DmSynth* slf) {
+	if (slf == NULL) {
+		return;
+	}
+
+	for (uint32_t i = 0; i < slf->channel_count; ++i) {
+		if (slf->channels[i].synth == NULL) {
+			continue;
+		}
+
+		tsf_channel_set_volume(slf->channels[i].synth, 0, slf->channels[i].volume_reset);
+		tsf_channel_set_pan(slf->channels[i].synth, 0, slf->channels[i].pan_reset);
+		tsf_channel_set_pitchwheel(slf->channels[i].synth, 0, slf->channels[i].pitch_bend_reset);
+	}
 }
 
 // TODO(lmichaelis): Technically, we shoud change as little as possible to accomoate the new band.
@@ -63,7 +79,7 @@ void DmSynth_sendBandUpdate(DmSynth* slf, DmBand* band) {
 
 	// Allocate all synths
 	slf->channel_count += 1;
-	slf->channels = Dm_alloc(sizeof(tsf*) * slf->channel_count);
+	slf->channels = Dm_alloc(sizeof(DmSynthChannel) * slf->channel_count);
 
 	for (size_t i = 0; i < band->instrument_count; ++i) {
 		DmInstrument* ins = &band->instruments[i];
@@ -71,11 +87,9 @@ void DmSynth_sendBandUpdate(DmSynth* slf, DmBand* band) {
 		tsf* tsf = NULL;
 		DmResult rv = DmSynth_createTsfForInstrument(ins, &tsf);
 		if (rv != DmResult_SUCCESS) {
-			slf->channels[ins->channel] = NULL;
+			slf->channels[ins->channel].synth = NULL;
 			continue;
 		}
-
-		slf->channels[ins->channel] = tsf;
 
 		float pan = (ins->flags & DmInstrument_PAN) ? (float) ins->pan / 127.F : 0.5f;
 		float vol = (ins->flags & DmInstrument_VOLUME) ? (float) ins->volume / 127.F : 1.f;
@@ -89,6 +103,12 @@ void DmSynth_sendBandUpdate(DmSynth* slf, DmBand* band) {
 		if (!res) {
 			Dm_report(DmLogLevel_ERROR, "DmSynth: tsf_channel_set_volume encountered an error.");
 		}
+
+
+		slf->channels[ins->channel].synth = tsf;
+		slf->channels[ins->channel].pitch_bend_reset = 8192;
+		slf->channels[ins->channel].volume_reset = vol;
+		slf->channels[ins->channel].pan_reset = pan;
 	}
 }
 
@@ -101,14 +121,32 @@ void DmSynth_sendControl(DmSynth* slf, uint32_t channel, uint8_t control, float 
 		return;
 	}
 
-	if (slf->channels[channel] == NULL) {
+	if (slf->channels[channel].synth == NULL) {
 		return;
 	}
 
 	if (control == DmInt_MIDI_CC_VOLUME || control == DmInt_MIDI_CC_EXPRESSION) {
-		tsf_channel_set_volume(slf->channels[channel], 0, value);
+		tsf_channel_set_volume(slf->channels[channel].synth, 0, value);
 	}else if (control == DmInt_MIDI_CC_PAN) {
-		tsf_channel_set_pan(slf->channels[channel], 0, value);
+		tsf_channel_set_pan(slf->channels[channel].synth, 0, value);
+	} else {
+		Dm_report(DmLogLevel_WARN, "DmSynth: Control change %d is unknown.", control);
+	}
+}
+
+void DmSynth_sendControlReset(DmSynth* slf, uint32_t channel, uint8_t control, float reset) {
+	if (slf == NULL || channel >= slf->channel_count) {
+		return;
+	}
+
+	if (slf->channels[channel].synth == NULL) {
+		return;
+	}
+
+	if (control == DmInt_MIDI_CC_VOLUME || control == DmInt_MIDI_CC_EXPRESSION) {
+		slf->channels[channel].volume_reset = reset;
+	}else if (control == DmInt_MIDI_CC_PAN) {
+		slf->channels[channel].pan_reset = reset;
 	} else {
 		Dm_report(DmLogLevel_WARN, "DmSynth: Control change %d is unknown.", control);
 	}
@@ -119,11 +157,23 @@ void DmSynth_sendPitchBend(DmSynth* slf, uint32_t channel, int bend) {
 		return;
 	}
 
-	if (slf->channels[channel] == NULL) {
+	if (slf->channels[channel].synth == NULL) {
 		return;
 	}
 
-	tsf_channel_set_pitchwheel(slf->channels[channel], 0, bend);
+	tsf_channel_set_pitchwheel(slf->channels[channel].synth, 0, bend);
+}
+
+void DmSynth_sendPitchBendReset(DmSynth* slf, uint32_t channel, int reset) {
+	if (slf == NULL || channel >= slf->channel_count) {
+		return;
+	}
+
+	if (slf->channels[channel].synth == NULL) {
+		return;
+	}
+
+	slf->channels[channel].pitch_bend_reset = reset;
 }
 
 void DmSynth_sendNoteOn(DmSynth* slf, uint32_t channel, uint8_t note, uint8_t velocity) {
@@ -131,11 +181,11 @@ void DmSynth_sendNoteOn(DmSynth* slf, uint32_t channel, uint8_t note, uint8_t ve
 		return;
 	}
 
-	if (slf->channels[channel] == NULL) {
+	if (slf->channels[channel].synth == NULL) {
 		return;
 	}
 
-	bool res = tsf_channel_note_on(slf->channels[channel], 0, note, ((float) velocity + 0.5f) / 127.f);
+	bool res = tsf_channel_note_on(slf->channels[channel].synth, 0, note, ((float) velocity + 0.5f) / 127.f);
 	if (!res) {
 		Dm_report(DmLogLevel_ERROR, "DmSynth: DmSynth_sendNoteOn encountered an error.");
 	}
@@ -146,11 +196,11 @@ void DmSynth_sendNoteOff(DmSynth* slf, uint32_t channel, uint8_t note) {
 		return;
 	}
 
-	if (slf->channels[channel] == NULL) {
+	if (slf->channels[channel].synth == NULL) {
 		return;
 	}
 
-	tsf_note_off(slf->channels[channel], 0, note);
+	tsf_note_off(slf->channels[channel].synth, 0, note);
 }
 
 void DmSynth_sendNoteOffAll(DmSynth* slf, uint32_t channel) {
@@ -158,11 +208,11 @@ void DmSynth_sendNoteOffAll(DmSynth* slf, uint32_t channel) {
 		return;
 	}
 
-	if (slf->channels[channel] == NULL) {
+	if (slf->channels[channel].synth == NULL) {
 		return;
 	}
 
-	tsf_channel_note_off_all(slf->channels[channel], 0);
+	tsf_channel_note_off_all(slf->channels[channel].synth, 0);
 }
 
 void DmSynth_sendNoteOffEverything(DmSynth* slf) {
@@ -171,7 +221,7 @@ void DmSynth_sendNoteOffEverything(DmSynth* slf) {
 	}
 
 	for (uint32_t i = 0; i < slf->channel_count; ++i) {
-		if (slf->channels[i] == NULL) {
+		if (slf->channels[i].synth == NULL) {
 			continue;
 		}
 
@@ -181,21 +231,21 @@ void DmSynth_sendNoteOffEverything(DmSynth* slf) {
 
 size_t DmSynth_render(DmSynth* slf, void* buf, size_t len, DmRenderOptions fmt) {
 	for (size_t i = 0; i < slf->channel_count; ++i) {
-		if (slf->channels[i] == NULL) {
+		if (slf->channels[i].synth == NULL) {
 			continue;
 		}
 
 		int channels = (fmt & DmRender_STEREO) ? 2 : 1;
 		if (fmt & DmRender_STEREO) {
-			tsf_set_output(slf->channels[i], TSF_STEREO_INTERLEAVED, 44100, 0);
+			tsf_set_output(slf->channels[i].synth, TSF_STEREO_INTERLEAVED, 44100, 0);
 		} else {
-			tsf_set_output(slf->channels[i], TSF_MONO, 44100, 0);
+			tsf_set_output(slf->channels[i].synth, TSF_MONO, 44100, 0);
 		}
 
 		if (fmt & DmRender_FLOAT) {
-			tsf_render_float(slf->channels[i], buf, (int) len / channels, true);
+			tsf_render_float(slf->channels[i].synth, buf, (int) len / channels, true);
 		} else {
-			tsf_render_short(slf->channels[i], buf, (int) len / channels, true);
+			tsf_render_short(slf->channels[i].synth, buf, (int) len / channels, true);
 		}
 	}
 
