@@ -87,7 +87,7 @@ typedef struct DmVersion {
 } DmVersion;
 
 typedef struct DmUnfo {
-	char16_t const* unam;
+	char const* unam;
 } DmUnfo;
 
 typedef struct DmInfo {
@@ -104,8 +104,8 @@ typedef struct DmReference {
 	DmGuid class_id;
 	uint32_t valid_data;
 	DmGuid guid;
-	char16_t const* name;
-	char16_t const* file;
+	char const* name;
+	char const* file;
 	DmVersion version;
 } DmReference;
 
@@ -127,5 +127,5 @@ DMINT void DmRiff_readInt(DmRiff* slf, int32_t* buf);
 DMINT void DmRiff_readDword(DmRiff* slf, uint32_t* buf);
 DMINT void DmRiff_readDouble(DmRiff* slf, double* buf);
 DMINT char const* DmRiff_readString(DmRiff* slf);
-DMINT char16_t const* DmRiff_readStringUtf(DmRiff* slf);
+DMINT char16_t* DmRiff_readStringUtf(DmRiff* slf);
 DMINT void DmRiff_reportDone(DmRiff* slf);

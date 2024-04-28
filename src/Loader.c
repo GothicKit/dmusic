@@ -81,6 +81,7 @@ DmResult DmLoader_getSegment(DmLoader* slf, char const* name, DmSegment** segmen
 	size_t length = 0;
 	void* bytes = DmLoader_resolveName(slf, name, &length);
 	if (bytes == NULL) {
+		Dm_report(DmLogLevel_DEBUG, "DmLoader: Segment '%s' not found", name);
 		return DmResult_NOT_FOUND;
 	}
 
@@ -89,6 +90,8 @@ DmResult DmLoader_getSegment(DmLoader* slf, char const* name, DmSegment** segmen
 		Dm_free(bytes);
 		return rv;
 	}
+
+	Dm_report(DmLogLevel_DEBUG, "DmLoader: Loading segment '%s'", name);
 
 	rv = DmSegment_parse(*segment, bytes, length);
 	if (rv != DmResult_SUCCESS) {
@@ -102,33 +105,13 @@ DmResult DmLoader_getSegment(DmLoader* slf, char const* name, DmSegment** segmen
 
 	rv = DmSegment_download(*segment, slf);
 	if (rv != DmResult_SUCCESS) {
+		Dm_report(DmLogLevel_ERROR, "DmLoader: Automatic download of segment '%s' failed", name);
 		DmSegment_release(*segment);
 		return rv;
 	}
 
+	Dm_report(DmLogLevel_INFO, "DmLoader: Automatic download of segment '%s' succeeded", name);
 	return DmResult_SUCCESS;
-}
-
-static char* Dm_utf16ToUtf8(char16_t const* u16) {
-	size_t len = 0;
-	while (u16[len] != 0) {
-		len += 1;
-	}
-
-	// A UTF code point can be represented by up to 4 UTF-8 bytes
-	char* name = Dm_alloc(len * 4 + 1);
-
-	mbstate_t state;
-	memset(&state, 0, sizeof state);
-
-	size_t i = 0;
-	size_t j = 0;
-	for (; i < len; ++i) {
-		j += c16rtomb(name + j, u16[i], &state);
-	}
-
-	name[j] = '\0';
-	return name;
 }
 
 DmResult DmLoader_getDownloadableSound(DmLoader* slf, DmReference const* ref, DmDls** snd) {
@@ -146,24 +129,21 @@ DmResult DmLoader_getDownloadableSound(DmLoader* slf, DmReference const* ref, Dm
 		return DmResult_SUCCESS;
 	}
 
-	// Convert `file` from UTF-16 to UTF-8
-	char* name = Dm_utf16ToUtf8(ref->file);
-
 	// Resolve and parse the DLS
 	size_t length = 0;
-	void* bytes = DmLoader_resolveName(slf, name, &length);
+	void* bytes = DmLoader_resolveName(slf, ref->file, &length);
 	if (bytes == NULL) {
-		Dm_free(name);
+		Dm_report(DmLogLevel_DEBUG, "DmLoader: DLS collection '%s' not found", ref->name);
 		return DmResult_NOT_FOUND;
 	}
-
-	Dm_free(name);
 
 	DmResult rv = DmDls_create(snd);
 	if (rv != DmResult_SUCCESS) {
 		Dm_free(bytes);
 		return rv;
 	}
+
+	Dm_report(DmLogLevel_DEBUG, "DmLoader: Loading DLS collection '%s'", ref->file);
 
 	rv = DmDls_parse(*snd, bytes, length);
 	if (rv != DmResult_SUCCESS) {
@@ -190,23 +170,21 @@ DmResult DmLoader_getStyle(DmLoader* slf, DmReference const* ref, DmStyle** sty)
 		return DmResult_SUCCESS;
 	}
 
-	char* name = Dm_utf16ToUtf8(ref->file);
-
 	// Resolve and parse the DLS
 	size_t length = 0;
-	void* bytes = DmLoader_resolveName(slf, name, &length);
+	void* bytes = DmLoader_resolveName(slf, ref->file, &length);
 	if (bytes == NULL) {
-		Dm_free(name);
+		Dm_report(DmLogLevel_DEBUG, "DmLoader: Style '%s' not found", ref->name);
 		return DmResult_NOT_FOUND;
 	}
-
-	Dm_free(name);
 
 	DmResult rv = DmStyle_create(sty);
 	if (rv != DmResult_SUCCESS) {
 		Dm_free(bytes);
 		return rv;
 	}
+
+	Dm_report(DmLogLevel_DEBUG, "DmLoader: Loading style '%s'", ref->file);
 
 	rv = DmStyle_parse(*sty, bytes, length);
 	if (rv != DmResult_SUCCESS) {

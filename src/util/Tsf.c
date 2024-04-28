@@ -33,43 +33,6 @@ enum {
 	kSamplePadding = 46,
 };
 
-static DmDlsInstrument* DmSynth_findDlsInstrument(DmInstrument* slf) {
-	if (slf->flags & (DmInstrument_GM | DmInstrument_GS)) {
-		Dm_report(DmLogLevel_DEBUG, "DmSynth: Not loading GM instrument");
-		return NULL;
-	}
-
-	if (slf->dls == NULL) {
-		Dm_report(DmLogLevel_ERROR, "DmSynth: Cannot resolve DLS instrument: DLS not loaded");
-		return NULL;
-	}
-
-	if (!(slf->flags & DmInstrument_PATCH)) {
-		Dm_report(DmLogLevel_ERROR, "DmSynth: Cannot resolve DLS instrument: Instrument patch not valid");
-		return NULL;
-	}
-
-	uint32_t bank = (slf->patch & 0xFF00U) >> 8;
-	uint32_t patch = slf->patch & 0xFFU;
-	DmDlsInstrument* dls = NULL;
-	for (size_t i = 0; i < slf->dls->instrument_count; ++i) {
-		dls = &slf->dls->instruments[i];
-
-		// TODO(lmichaelis): We need to ignore drum kits for now since I don't know how to handle them properly
-		if (dls->bank & (1U << 31U)) {
-			continue;
-		}
-
-		// If it's the correct instrument, return it.
-		if (dls->bank == bank && dls->patch == patch) {
-			return dls;
-		}
-	}
-
-	Dm_report(DmLogLevel_ERROR, "DmSynth: Cannot resolve DLS instrument: Patch %d:%d not found", bank, patch);
-	return NULL;
-}
-
 static size_t DmSynth_convertGeneratorArticulators(struct tsf_hydra_igen* gens, DmDlsArticulator* art) {
 	size_t count = 0;
 
@@ -135,7 +98,7 @@ static size_t DmSynth_convertGeneratorArticulators(struct tsf_hydra_igen* gens, 
 }
 
 DmResult DmSynth_createTsfForInstrument(DmInstrument* slf, tsf** out) {
-	DmDlsInstrument* dls = DmSynth_findDlsInstrument(slf);
+	DmDlsInstrument* dls = slf->dls;
 	if (dls == NULL) {
 		return DmResult_NOT_FOUND;
 	}
@@ -146,7 +109,7 @@ DmResult DmSynth_createTsfForInstrument(DmInstrument* slf, tsf** out) {
 	// 1.1. Count the number of PCM samples actually required after decoding.
 	size_t sample_count = 0;
 	for (uint32_t i = 0; i < dls->region_count; ++i) {
-		DmDlsWave* wav = &slf->dls->wave_table[dls->regions[i].link_table_index];
+		DmDlsWave* wav = &slf->dls_collection->wave_table[dls->regions[i].link_table_index];
 		sample_count += DmDls_decodeSamples(wav, NULL, 0);
 
 		// There are 46 0-samples after each "real" sample
@@ -167,7 +130,7 @@ DmResult DmSynth_createTsfForInstrument(DmInstrument* slf, tsf** out) {
 
 	uint32_t sample_offset = 0;
 	for (uint32_t i = 0; i < dls->region_count; ++i) {
-		DmDlsWave* wav = &slf->dls->wave_table[dls->regions[i].link_table_index];
+		DmDlsWave* wav = &slf->dls_collection->wave_table[dls->regions[i].link_table_index];
 
 		strncpy(sample_headers[i].sampleName, wav->info.inam, 19);
 

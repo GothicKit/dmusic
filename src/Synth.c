@@ -2,11 +2,19 @@
 // SPDX-License-Identifier: MIT-Modern-Variant
 #include "_Internal.h"
 
-extern DmResult DmSynth_createTsfForInstrument(DmInstrument* slf, tsf** out);
+enum {
+	DmInt_MIDI_CC_VOLUME = 7,
+	DmInt_MIDI_CC_PAN = 10,
+	DmInt_MIDI_CC_EXPRESSION = 11,
 
-static size_t max(size_t a, size_t b) {
-	return a >= b ? a : b;
-}
+	DmInt_MIDI_MAX = 127,
+	DmInt_PITCH_BEND_NEUTRAL = 8192
+};
+
+#define DmInt_PAN_CENTER 0.5F
+#define DmInt_VOLUME_MAX 1.0F
+
+extern DmResult DmSynth_createTsfForInstrument(DmInstrument* slf, tsf** out);
 
 void DmSynth_init(DmSynth* slf) {
 	if (slf == NULL) {
@@ -51,7 +59,7 @@ void DmSynth_reset(DmSynth* slf) {
 	}
 }
 
-// TODO(lmichaelis): Technically, we shoud change as little as possible to accomoate the new band.
+// TODO(lmichaelis): Technically, we should change as little as possible to accommodate the new band.
 //                   For example: if only the pan of an instrument changes, we should also only update that
 //                   instead of reloading the entire instrument list and re-creating all TSFs.
 // See also: https://documentation.help/DirectMusic/usingbands.htm
@@ -74,7 +82,7 @@ void DmSynth_sendBandUpdate(DmSynth* slf, DmBand* band) {
 
 	// Calculate the number of required performance channels
 	for (size_t i = 0; i < band->instrument_count; ++i) {
-		slf->channel_count = max(band->instruments[i].channel, slf->channel_count);
+		slf->channel_count = max_usize(band->instruments[i].channel, slf->channel_count);
 	}
 
 	// Allocate all synths
@@ -91,8 +99,8 @@ void DmSynth_sendBandUpdate(DmSynth* slf, DmBand* band) {
 			continue;
 		}
 
-		float pan = (ins->flags & DmInstrument_PAN) ? (float) ins->pan / 127.F : 0.5f;
-		float vol = (ins->flags & DmInstrument_VOLUME) ? (float) ins->volume / 127.F : 1.f;
+		float pan = (ins->flags & DmInstrument_PAN) ? (float) ins->pan / DmInt_MIDI_MAX : DmInt_PAN_CENTER;
+		float vol = (ins->flags & DmInstrument_VOLUME) ? (float) ins->volume / DmInt_MIDI_MAX : DmInt_VOLUME_MAX;
 
 		bool res = tsf_channel_set_pan(tsf, 0, pan);
 		if (!res) {
@@ -104,17 +112,12 @@ void DmSynth_sendBandUpdate(DmSynth* slf, DmBand* band) {
 			Dm_report(DmLogLevel_ERROR, "DmSynth: tsf_channel_set_volume encountered an error.");
 		}
 
-
 		slf->channels[ins->channel].synth = tsf;
-		slf->channels[ins->channel].pitch_bend_reset = 8192;
+		slf->channels[ins->channel].pitch_bend_reset = DmInt_PITCH_BEND_NEUTRAL;
 		slf->channels[ins->channel].volume_reset = vol;
 		slf->channels[ins->channel].pan_reset = pan;
 	}
 }
-
-#define DmInt_MIDI_CC_VOLUME 7
-#define DmInt_MIDI_CC_PAN 10
-#define DmInt_MIDI_CC_EXPRESSION 11
 
 void DmSynth_sendControl(DmSynth* slf, uint32_t channel, uint8_t control, float value) {
 	if (slf == NULL || channel >= slf->channel_count) {
@@ -127,7 +130,7 @@ void DmSynth_sendControl(DmSynth* slf, uint32_t channel, uint8_t control, float 
 
 	if (control == DmInt_MIDI_CC_VOLUME || control == DmInt_MIDI_CC_EXPRESSION) {
 		tsf_channel_set_volume(slf->channels[channel].synth, 0, value);
-	}else if (control == DmInt_MIDI_CC_PAN) {
+	} else if (control == DmInt_MIDI_CC_PAN) {
 		tsf_channel_set_pan(slf->channels[channel].synth, 0, value);
 	} else {
 		Dm_report(DmLogLevel_WARN, "DmSynth: Control change %d is unknown.", control);
@@ -145,7 +148,7 @@ void DmSynth_sendControlReset(DmSynth* slf, uint32_t channel, uint8_t control, f
 
 	if (control == DmInt_MIDI_CC_VOLUME || control == DmInt_MIDI_CC_EXPRESSION) {
 		slf->channels[channel].volume_reset = reset;
-	}else if (control == DmInt_MIDI_CC_PAN) {
+	} else if (control == DmInt_MIDI_CC_PAN) {
 		slf->channels[channel].pan_reset = reset;
 	} else {
 		Dm_report(DmLogLevel_WARN, "DmSynth: Control change %d is unknown.", control);
@@ -185,7 +188,7 @@ void DmSynth_sendNoteOn(DmSynth* slf, uint32_t channel, uint8_t note, uint8_t ve
 		return;
 	}
 
-	bool res = tsf_channel_note_on(slf->channels[channel].synth, 0, note, ((float) velocity + 0.5f) / 127.f);
+	bool res = tsf_channel_note_on(slf->channels[channel].synth, 0, note, ((float) velocity + 0.5f) / DmInt_MIDI_MAX);
 	if (!res) {
 		Dm_report(DmLogLevel_ERROR, "DmSynth: DmSynth_sendNoteOn encountered an error.");
 	}

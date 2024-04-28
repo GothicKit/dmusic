@@ -93,7 +93,9 @@ typedef struct DmInstrument {
 	int16_t transpose;
 	uint32_t channel_priority;
 	DmReference reference;
-	DmDls* dls;
+
+	DmDls* dls_collection;
+	DmDlsInstrument* dls;
 } DmInstrument;
 
 typedef struct DmBand {
@@ -437,6 +439,7 @@ DMINT void* Dm_alloc(size_t len);
 DMINT void Dm_free(void* ptr);
 DMINT void Dm_report(DmLogLevel lvl, char const* fmt, ...);
 
+DMINT size_t max_usize(size_t a, size_t b);
 DMINT bool DmGuid_equals(DmGuid const* a, DmGuid const* b);
 DMINT void DmTimeSignature_parse(DmTimeSignature* slf, DmRiff* rif);
 

@@ -10,6 +10,7 @@ static int32_t max(int32_t a, int32_t b) {
 
 enum {
 	DmInt_PULSES_PER_QUARTER_NOTE = 768,
+	DmInt_DEFAULT_TEMPO = 100,
 };
 
 DmResult DmPerformance_create(DmPerformance** slf) {
@@ -23,7 +24,7 @@ DmResult DmPerformance_create(DmPerformance** slf) {
 	}
 
 	new->reference_count = 1;
-	new->tempo = 100;
+	new->tempo = DmInt_DEFAULT_TEMPO;
 	new->groove = 1;
 
 	DmResult rv = DmMessageQueue_init(&new->control_queue);
@@ -69,11 +70,13 @@ void DmPerformance_release(DmPerformance* slf) {
 static uint32_t DmPerformance_getBeatLength(DmTimeSignature sig) {
 	if (sig.beat == 0) {
 		return DmInt_PULSES_PER_QUARTER_NOTE / 64;
-	} else if (sig.beat <= 4) {
-		return DmInt_PULSES_PER_QUARTER_NOTE * (4 / sig.beat);
-	} else {
-		return DmInt_PULSES_PER_QUARTER_NOTE / (sig.beat / 4);
 	}
+
+	if (sig.beat <= 4) {
+		return DmInt_PULSES_PER_QUARTER_NOTE * (4 / sig.beat);
+	}
+
+	return DmInt_PULSES_PER_QUARTER_NOTE / (sig.beat / 4);
 }
 
 static uint32_t DmPerformance_getMeasureLength(DmTimeSignature sig) {
@@ -665,7 +668,7 @@ static void DmPerformance_handleCommandMessage(DmPerformance* slf, DmMessage_Com
 static void DmPerformance_handleMessage(DmPerformance* slf, DmMessage* msg) {
 	switch (msg->type) {
 	case DmMessage_SEGMENT: {
-		Dm_report(DmLogLevel_DEBUG, "time=%d msg=segment-change", slf->time);
+		Dm_report(DmLogLevel_TRACE, "DmPerformance: MESSAGE time=%d msg=segment-change", slf->time);
 
 		// TODO(lmichaelis): The segment in this message might no longer be valid, since we
 		// have called `pop` on the queue but not kept a strong reference to the message!
@@ -706,28 +709,28 @@ static void DmPerformance_handleMessage(DmPerformance* slf, DmMessage* msg) {
 	case DmMessage_STYLE:
 		// TODO(lmichaelis): The style in this mesage might have alreay been de-allocated!
 		slf->style = DmStyle_retain(msg->style.style);
-		Dm_report(DmLogLevel_DEBUG, "time=%d msg=style-change", slf->time);
+		Dm_report(DmLogLevel_TRACE, "DmPerformance: MESSAGE time=%d msg=style-change", slf->time);
 		break;
 	case DmMessage_BAND:
 		// TODO(lmichaelis): The band in this mesage might have alreay been de-allocated!
 		DmSynth_sendBandUpdate(&slf->synth, msg->band.band);
-		Dm_report(DmLogLevel_DEBUG, "time=%d msg=band-change", slf->time);
+		Dm_report(DmLogLevel_TRACE, "DmPerformance: MESSAGE time=%d msg=band-change", slf->time);
 		break;
 	case DmMessage_TEMPO:
 		slf->tempo = msg->tempo.tempo;
-		Dm_report(DmLogLevel_DEBUG, "time=%d msg=tempo-change tempo=%f", slf->time, msg->tempo.tempo);
+		Dm_report(DmLogLevel_TRACE, "DmPerformance: MESSAGE time=%d msg=tempo-change tempo=%f", slf->time, msg->tempo.tempo);
 		break;
 	case DmMessage_COMMAND:
 		DmPerformance_handleCommandMessage(slf, &msg->command);
-		Dm_report(DmLogLevel_DEBUG, "time=%d msg=command kind=%d", slf->time, msg->command.command);
+		Dm_report(DmLogLevel_TRACE, "DmPerformance: MESSAGE time=%d msg=command kind=%d", slf->time, msg->command.command);
 		break;
 	case DmMessage_CHORD:
 		slf->chord = msg->chord;
-		Dm_report(DmLogLevel_DEBUG, "time=%d msg=chord-change", slf->time);
+		Dm_report(DmLogLevel_TRACE, "DmPerformance: MESSAGE time=%d msg=chord-change", slf->time);
 		break;
 	case DmMessage_PATTERN: {
 		DmPattern* pttn = DmPerformance_choosePattern(slf, DmCommand_GROOVE);
-		Dm_report(DmLogLevel_DEBUG, "time=%d msg=pattern-change", slf->time);
+		Dm_report(DmLogLevel_TRACE, "DmPerformance: MESSAGE time=%d msg=pattern-change", slf->time);
 
 		if (pttn != NULL) {
 			DmPerformance_playPattern(slf, pttn);
@@ -737,16 +740,16 @@ static void DmPerformance_handleMessage(DmPerformance* slf, DmMessage* msg) {
 	case DmMessage_NOTE:
 		if (msg->note.on) {
 			DmSynth_sendNoteOn(&slf->synth, msg->note.channel, msg->note.note, msg->note.velocity);
-			Dm_report(DmLogLevel_DEBUG,
-			          "time=%d msg=note-on note=%d channel=%d velocity=%d",
+			Dm_report(DmLogLevel_TRACE,
+			          "DmPerformance: MESSAGE time=%d msg=note-on note=%d channel=%d velocity=%d",
 			          slf->time,
 			          (int) msg->note.note,
 			          msg->note.channel,
 			          msg->note.velocity);
 		} else {
 			DmSynth_sendNoteOff(&slf->synth, msg->note.channel, msg->note.note);
-			Dm_report(DmLogLevel_DEBUG,
-			          "time=%d msg=note-off note=%d channel=%d",
+			Dm_report(DmLogLevel_TRACE,
+			          "DmPerformance: MESSAGE time=%d msg=note-off note=%d channel=%d",
 			          slf->time,
 			          (int) msg->note.note,
 			          msg->note.channel);
@@ -758,8 +761,8 @@ static void DmPerformance_handleMessage(DmPerformance* slf, DmMessage* msg) {
 			DmSynth_sendControlReset(&slf->synth, msg->control.channel, msg->control.control, msg->control.reset_value);
 		}
 
-		Dm_report(DmLogLevel_DEBUG,
-		          "time=%d msg=control channel=%d control=%d value=%f",
+		Dm_report(DmLogLevel_TRACE,
+		          "DmPerformance: MESSAGE time=%d msg=control channel=%d control=%d value=%f",
 		          slf->time,
 		          msg->control.channel,
 		          msg->control.control,
@@ -771,8 +774,8 @@ static void DmPerformance_handleMessage(DmPerformance* slf, DmMessage* msg) {
 			DmSynth_sendPitchBendReset(&slf->synth, msg->pitch_bend.channel, msg->pitch_bend.reset_value);
 		}
 
-		Dm_report(DmLogLevel_DEBUG,
-		          "time=%d channel=%d msg=pitch-bend value=%d",
+		Dm_report(DmLogLevel_TRACE,
+		          "DmPerformance: MESSAGE time=%d channel=%d msg=pitch-bend value=%d",
 		          slf->time,
 		          msg->pitch_bend.channel,
 		          msg->pitch_bend.value);

@@ -137,13 +137,13 @@ char const* DmRiff_readString(DmRiff* slf) {
 	return str;
 }
 
-char16_t const* DmRiff_readStringUtf(DmRiff* slf) {
+char16_t* DmRiff_readStringUtf(DmRiff* slf) {
 	if (slf == NULL) {
 		return u"";
 	}
 
-	char16_t const* mem = (char16_t const*) slf->mem;
-	char16_t const* str = (char16_t const*) slf->mem + slf->pos;
+	char16_t* mem = (char16_t*) slf->mem;
+	char16_t* str = (char16_t*) slf->mem + slf->pos;
 
 	while (mem[slf->pos] != 0) {
 		slf->pos += 1;
