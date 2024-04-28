@@ -229,16 +229,17 @@ typedef struct DmStyle {
 } DmStyle;
 
 typedef enum DmMessageType {
-	DmMessage_SEGMENT = 0,
+	DmMessage_NOTE = 0,
+	DmMessage_CONTROL,
+	DmMessage_PITCH_BEND,
+
+	DmMessage_SEGMENT,
 	DmMessage_STYLE,
 	DmMessage_BAND,
 	DmMessage_TEMPO,
 	DmMessage_CHORD,
 	DmMessage_COMMAND,
 	DmMessage_PATTERN,
-	DmMessage_CONTROL,
-	DmMessage_NOTE,
-	DmMessage_PITCH_BEND,
 } DmMessageType;
 
 typedef struct DmMessage_Tempo {
