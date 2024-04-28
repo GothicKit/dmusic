@@ -80,17 +80,25 @@ static uint32_t DmPerformance_getBeatLength(DmTimeSignature sig) {
 }
 
 static uint32_t DmPerformance_getMeasureLength(DmTimeSignature sig) {
-	return sig.beats_per_measure * DmPerformance_getBeatLength(sig);
+	uint32_t v = sig.beats_per_measure * DmPerformance_getBeatLength(sig);
+
+	if (v < 1) {
+		return 1;
+	}
+
+	return v;
 }
 
 // See https://documentation.help/DirectMusic/dmussegfflags.htm
 static uint32_t DmPerformance_getStartTime(DmPerformance* slf, DmPlaybackFlags flags) {
 	if (flags & DmPlayback_BEAT) {
 		uint32_t beat_length = DmPerformance_getBeatLength(slf->time_signature);
-
 		uint32_t time_to_next_beat = beat_length;
-		if (slf->segment_start != 0) {
-			time_to_next_beat = beat_length - (slf->time % slf->segment_start);
+
+		uint32_t offset = slf->time - slf->segment_start;
+
+		if (offset != 0) {
+			time_to_next_beat = beat_length - (offset % beat_length);
 		}
 
 		return slf->time + time_to_next_beat;
@@ -100,8 +108,10 @@ static uint32_t DmPerformance_getStartTime(DmPerformance* slf, DmPlaybackFlags f
 		uint32_t measure_length = DmPerformance_getMeasureLength(slf->time_signature);
 		uint32_t time_to_next_measure = measure_length;
 
-		if (slf->segment_start != 0) {
-			time_to_next_measure =  measure_length - (slf->time % slf->segment_start);
+		uint32_t offset = slf->time - slf->segment_start;
+
+		if (offset) {
+			time_to_next_measure = measure_length - (offset % measure_length);
 		}
 		return slf->time + time_to_next_measure;
 	}
@@ -130,29 +140,31 @@ DmResult DmPerformance_playSegment(DmPerformance* slf, DmSegment* sgt, DmPlaybac
 	msg.time = 0;
 	msg.type = DmMessage_SEGMENT;
 	msg.segment.segment = sgt;
-	DmMessageQueue_add(&slf->control_queue, &msg, offset);
+	DmMessageQueue_add(&slf->control_queue, &msg, offset, DmQueueConflict_REPLACE);
 
 	return DmResult_SUCCESS;
 }
 
 static uint32_t DmPerformance_commandToEmbellishment(DmCommandType cmd) {
-	switch (cmd) {
-	case DmCommand_GROOVE:
-		return 0; // "normal"
-	case DmCommand_FILL:
-		return 1; // "fill"
-	case DmCommand_INTRO:
-		return 4; // "intro"
-	case DmCommand_BREAK:
-		return 2; // "break"
-	case DmCommand_END:
-		return 8;
-	default:
-		Dm_report(DmLogLevel_ERROR, "DmPerformance: Embellishment not implemented: %s", cmd);
-		break;
+	uint32_t f = 0;
+
+	if (cmd & DmCommand_FILL) {
+		f |= 1; // "fill"
 	}
 
-	return 0; // "normal"
+	if (cmd & DmCommand_INTRO) {
+		f |= 2; // "intro"
+	}
+
+	if (cmd & DmCommand_BREAK) {
+		f |= 4; // "break"
+	}
+
+	if (cmd & DmCommand_END) {
+		f |= 8; // "end"
+	}
+
+	return f; // "normal"
 }
 
 // See: https://documentation.help/DirectMusic/howmusicvariesduringplayback.htm
@@ -160,6 +172,7 @@ static DmPattern* DmPerformance_choosePattern(DmPerformance* slf, DmCommandType 
 	size_t suitable_pattern_index = 0;
 	size_t suitable_pattern_count = 0;
 
+	uint32_t embellishment = DmPerformance_commandToEmbellishment(cmd);
 	for (size_t i = 0; i < slf->style->patterns.length; ++i) {
 		DmPattern* pttn = &slf->style->patterns.data[i];
 
@@ -169,7 +182,7 @@ static DmPattern* DmPerformance_choosePattern(DmPerformance* slf, DmCommandType 
 		}
 
 		// Patterns with a differing embellishment are not supported
-		if (pttn->embellishment != DmPerformance_commandToEmbellishment(cmd)) {
+		if (pttn->embellishment != embellishment && !(pttn->embellishment & embellishment)) {
 			continue;
 		}
 
@@ -449,6 +462,8 @@ static void DmPerformance_playPattern(DmPerformance* slf, DmPattern* pttn) {
 	DmMessageQueue_clear(&slf->music_queue);
 	DmSynth_sendNoteOffEverything(&slf->synth);
 
+	Dm_report(DmLogLevel_DEBUG, "DmPerformance: Playing pattern '%s'", pttn->info.unam);
+
 	int variation_lock[256];
 	for (size_t i = 0; i < 256; ++i) {
 		variation_lock[i] = -1;
@@ -548,12 +563,12 @@ static void DmPerformance_playPattern(DmPerformance* slf, DmPattern* pttn) {
 			msg.note.velocity = (uint8_t) velocity;
 			msg.note.channel = pref->logical_part_id;
 
-			DmMessageQueue_add(&slf->music_queue, &msg, slf->time + time);
+			DmMessageQueue_add(&slf->music_queue, &msg, slf->time + time, DmQueueConflict_APPEND);
 
 			msg.note.on = false;
 			msg.note.note = (uint8_t) midi;
 
-			DmMessageQueue_add(&slf->music_queue, &msg, slf->time + time + duration);
+			DmMessageQueue_add(&slf->music_queue, &msg, slf->time + time + duration, DmQueueConflict_APPEND);
 		}
 
 		for (size_t j = 0; j < part->curve_count; ++j) {
@@ -634,10 +649,22 @@ static void DmPerformance_playPattern(DmPerformance* slf, DmPattern* pttn) {
 					prev_value = (float) msg.pitch_bend.value;
 				}
 
-				DmMessageQueue_add(&slf->music_queue, &msg, slf->time + start_time + offset);
+				DmMessageQueue_add(&slf->music_queue, &msg, slf->time + start_time + offset, DmQueueConflict_APPEND);
 			}
 		}
 	}
+
+	DmMessage msg;
+	msg.type = DmMessage_COMMAND;
+	msg.command.command = DmCommand_GROOVE;
+	msg.command.groove_level = slf->groove;
+	msg.command.groove_range = slf->groove_range;
+	msg.command.repeat_mode = DmPatternSelect_RANDOM;
+	msg.command.beat = 0;
+	msg.command.measure = 0;
+
+	uint32_t pattern_length = DmPerformance_getMeasureLength(pttn->time_signature) * pttn->length_measures;
+	DmMessageQueue_add(&slf->control_queue, &msg, slf->time + pattern_length, DmQueueConflict_KEEP);
 
 	slf->variation += 1;
 }
@@ -645,12 +672,13 @@ static void DmPerformance_playPattern(DmPerformance* slf, DmPattern* pttn) {
 static void DmPerformance_handleCommandMessage(DmPerformance* slf, DmMessage_Command* msg) {
 	if (msg->command == DmCommand_GROOVE) {
 		slf->groove = msg->groove_level;
+		slf->groove_range = msg->groove_range;
 
 		// Randomize the groove level
 		if (msg->groove_range != 0) {
 			int rnd = rand() % msg->groove_range;
 			int range = rnd - (msg->groove_range / 2);
-			slf->groove = (uint32_t) max(msg->groove_level + range, 0);
+			slf->groove = (uint8_t) max(msg->groove_level + range, 0);
 		}
 	} else if (msg->command == DmCommand_END_AND_INTRO) {
 		Dm_report(DmLogLevel_WARN, "DmPerformance: Command message with command %d not implemented", msg->command);
@@ -668,7 +696,10 @@ static void DmPerformance_handleCommandMessage(DmPerformance* slf, DmMessage_Com
 static void DmPerformance_handleMessage(DmPerformance* slf, DmMessage* msg) {
 	switch (msg->type) {
 	case DmMessage_SEGMENT: {
-		Dm_report(DmLogLevel_TRACE, "DmPerformance: MESSAGE time=%d msg=segment-change", slf->time);
+		Dm_report(DmLogLevel_DEBUG,
+		          "DmPerformance: MESSAGE time=%d msg=segment-change segment=\"%s\"",
+		          slf->time,
+		          msg->segment.segment->info.unam);
 
 		// TODO(lmichaelis): The segment in this message might no longer be valid, since we
 		// have called `pop` on the queue but not kept a strong reference to the message!
@@ -676,6 +707,10 @@ static void DmPerformance_handleMessage(DmPerformance* slf, DmMessage* msg) {
 
 		DmMessageQueue_clear(&slf->control_queue);
 		DmMessageQueue_clear(&slf->music_queue);
+		DmSynth_sendNoteOffEverything(&slf->synth);
+
+		// Reset the time to combat drift
+		slf->time = 0;
 
 		for (size_t i = 0; i < sgt->messages.length; ++i) {
 			DmMessage* m = &sgt->messages.data[i];
@@ -688,7 +723,7 @@ static void DmPerformance_handleMessage(DmPerformance* slf, DmMessage* msg) {
 				continue;
 			}
 
-			DmMessageQueue_add(&slf->control_queue, m, slf->time + m->time);
+			DmMessageQueue_add(&slf->control_queue, m, slf->time + m->time, DmQueueConflict_REPLACE);
 		}
 
 		DmSegment_release(slf->segment);
@@ -702,41 +737,46 @@ static void DmPerformance_handleMessage(DmPerformance* slf, DmMessage* msg) {
 			m.segment.segment = sgt;
 			m.segment.loop = msg->segment.loop + 1;
 
-			DmMessageQueue_add(&slf->control_queue, &m, slf->time + slf->segment->length);
+			DmMessageQueue_add(&slf->control_queue, &m, slf->time + slf->segment->length, DmQueueConflict_KEEP);
 		}
 		break;
 	}
 	case DmMessage_STYLE:
-		// TODO(lmichaelis): The style in this mesage might have alreay been de-allocated!
+		// TODO(lmichaelis): The style in this message might have already been de-allocated!
 		slf->style = DmStyle_retain(msg->style.style);
-		Dm_report(DmLogLevel_TRACE, "DmPerformance: MESSAGE time=%d msg=style-change", slf->time);
+		Dm_report(DmLogLevel_DEBUG,
+		          "DmPerformance: MESSAGE time=%d msg=style-change style=\"%s\"",
+		          slf->time,
+		          msg->style.style->info.unam);
 		break;
 	case DmMessage_BAND:
-		// TODO(lmichaelis): The band in this mesage might have alreay been de-allocated!
+		// TODO(lmichaelis): The band in this message might have already been de-allocated!
 		DmSynth_sendBandUpdate(&slf->synth, msg->band.band);
-		Dm_report(DmLogLevel_TRACE, "DmPerformance: MESSAGE time=%d msg=band-change", slf->time);
+		Dm_report(DmLogLevel_DEBUG,
+		          "DmPerformance: MESSAGE time=%d msg=band-change band=\"%s\"",
+		          slf->time,
+		          msg->band.band->info.unam);
 		break;
 	case DmMessage_TEMPO:
 		slf->tempo = msg->tempo.tempo;
-		Dm_report(DmLogLevel_TRACE, "DmPerformance: MESSAGE time=%d msg=tempo-change tempo=%f", slf->time, msg->tempo.tempo);
+		Dm_report(DmLogLevel_DEBUG,
+		          "DmPerformance: MESSAGE time=%d msg=tempo-change tempo=%f",
+		          slf->time,
+		          msg->tempo.tempo);
 		break;
 	case DmMessage_COMMAND:
 		DmPerformance_handleCommandMessage(slf, &msg->command);
-		Dm_report(DmLogLevel_TRACE, "DmPerformance: MESSAGE time=%d msg=command kind=%d", slf->time, msg->command.command);
+		Dm_report(DmLogLevel_DEBUG,
+		          "DmPerformance: MESSAGE time=%d msg=command kind=%d groove=%d (+/- %d)",
+		          slf->time,
+		          msg->command.command,
+		          msg->command.groove_level,
+		          msg->command.groove_range / 2);
 		break;
 	case DmMessage_CHORD:
 		slf->chord = msg->chord;
-		Dm_report(DmLogLevel_TRACE, "DmPerformance: MESSAGE time=%d msg=chord-change", slf->time);
+		Dm_report(DmLogLevel_DEBUG, "DmPerformance: MESSAGE time=%d msg=chord-change", slf->time);
 		break;
-	case DmMessage_PATTERN: {
-		DmPattern* pttn = DmPerformance_choosePattern(slf, DmCommand_GROOVE);
-		Dm_report(DmLogLevel_TRACE, "DmPerformance: MESSAGE time=%d msg=pattern-change", slf->time);
-
-		if (pttn != NULL) {
-			DmPerformance_playPattern(slf, pttn);
-		}
-		break;
-	}
 	case DmMessage_NOTE:
 		if (msg->note.on) {
 			DmSynth_sendNoteOn(&slf->synth, msg->note.channel, msg->note.note, msg->note.velocity);
@@ -871,6 +911,46 @@ DmResult DmPerformance_renderPcm(DmPerformance* slf, void* buf, size_t len, DmRe
 	uint32_t remaining_samples = (uint32_t) (len - sample);
 	(void) DmSynth_render(&slf->synth, buf, remaining_samples, opts);
 	slf->time += DmPerformance_getDurationFromSampleCount(slf, remaining_samples, sample_rate, channels);
+
+	return DmResult_SUCCESS;
+}
+
+DmResult DmPerformance_playTransition(DmPerformance* slf,
+                                      DmSegment* sgt,
+                                      DmEmbellishmentType embellishment,
+                                      DmPlaybackFlags flags) {
+	if (slf == NULL || sgt == NULL) {
+		return DmResult_INVALID_ARGUMENT;
+	}
+
+	DmMessageQueue_clear(&slf->control_queue);
+
+	// TODO: This is wrong!
+	uint32_t start = DmPerformance_getStartTime(slf, flags);
+	if (embellishment != DmEmbellishment_NONE) {
+		// TODO: This won't work if there are multiple possible pattern
+		DmPattern* pattern = DmPerformance_choosePattern(slf, (DmCommandType) embellishment);
+
+		if (pattern != NULL) {
+			DmMessage msg;
+			msg.type = DmMessage_COMMAND;
+			msg.command.command = (DmCommandType) embellishment;
+			msg.command.groove_level = slf->groove;
+			msg.command.groove_range = slf->groove_range;
+			msg.command.measure = 0;
+			msg.command.beat = 0;
+			msg.command.repeat_mode = DmPatternSelect_RANDOM;
+
+			DmMessageQueue_add(&slf->control_queue, &msg, start, DmQueueConflict_REPLACE);
+
+			start += DmPerformance_getMeasureLength(pattern->time_signature) * pattern->length_measures;
+		}
+	}
+
+	DmMessage msg;
+	msg.type = DmMessage_SEGMENT;
+	msg.segment.segment = sgt;
+	DmMessageQueue_add(&slf->control_queue, &msg, start, DmQueueConflict_REPLACE);
 
 	return DmResult_SUCCESS;
 }

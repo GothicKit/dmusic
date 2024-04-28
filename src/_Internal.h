@@ -242,7 +242,6 @@ typedef enum DmMessageType {
 	DmMessage_TEMPO,
 	DmMessage_CHORD,
 	DmMessage_COMMAND,
-	DmMessage_PATTERN,
 } DmMessageType;
 
 typedef struct DmMessage_Tempo {
@@ -397,6 +396,12 @@ struct DmSegment {
 	DmMessageList messages;
 };
 
+typedef enum DmQueueConflictResolution {
+	DmQueueConflict_KEEP,
+	DmQueueConflict_REPLACE,
+	DmQueueConflict_APPEND,
+} DmQueueConflictResolution;
+
 typedef struct DmMessageQueueItem {
 	struct DmMessageQueueItem* next;
 	DmMessage data;
@@ -426,7 +431,8 @@ struct DmPerformance {
 
 	uint32_t variation;
 	uint32_t time;
-	uint32_t groove;
+	uint8_t groove;
+	uint8_t groove_range;
 	double tempo;
 	DmMessage_Chord chord;
 	DmTimeSignature time_signature;
@@ -453,7 +459,7 @@ DMINT void DmMessage_copy(DmMessage* slf, DmMessage* cpy, uint32_t time);
 DMINT void DmMessage_free(DmMessage* slf);
 DMINT DmResult DmMessageQueue_init(DmMessageQueue* slf);
 DMINT void DmMessageQueue_free(DmMessageQueue* slf);
-DMINT void DmMessageQueue_add(DmMessageQueue* slf, DmMessage* msg, uint32_t time);
+DMINT void DmMessageQueue_add(DmMessageQueue* slf, DmMessage* msg, uint32_t time, DmQueueConflictResolution cr);
 DMINT bool DmMessageQueue_get(DmMessageQueue* slf, DmMessage* msg);
 DMINT void DmMessageQueue_pop(DmMessageQueue* slf);
 DMINT void DmMessageQueue_clear(DmMessageQueue* slf);

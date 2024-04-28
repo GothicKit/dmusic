@@ -284,9 +284,18 @@ typedef enum DmPlaybackFlags {
 	DmPlayback_INVALIDATE_PRI = 1 << 28
 } DmPlaybackFlags;
 
+typedef enum DmEmbellishmentType {
+	DmEmbellishment_NONE = 0,
+	DmEmbellishment_FILL = 1,
+	DmEmbellishment_INTRO = 2,
+	DmEmbellishment_BREAK = 3,
+	DmEmbellishment_END = 4,
+} DmEmbellishmentType;
+
 DMAPI DmResult DmPerformance_create(DmPerformance** slf);
 DMAPI DmPerformance* DmPerformance_retain(DmPerformance* slf);
 DMAPI void DmPerformance_release(DmPerformance* slf);
 
 DMAPI DmResult DmPerformance_playSegment(DmPerformance* slf, DmSegment* sgt, DmPlaybackFlags flags);
+DMAPI DmResult DmPerformance_playTransition(DmPerformance* slf, DmSegment* sgt, DmEmbellishmentType embellishment, DmPlaybackFlags flags);
 DMAPI DmResult DmPerformance_renderPcm(DmPerformance* slf, void* buf, size_t len, DmRenderOptions opts);

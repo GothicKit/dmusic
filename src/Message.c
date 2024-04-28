@@ -190,9 +190,36 @@ void DmMessageQueue_free(DmMessageQueue* slf) {
 	}
 }
 
-void DmMessageQueue_add(DmMessageQueue* slf, DmMessage* msg, uint32_t time) {
+static DmMessageQueueItem* DmMessageQueue_getAt(DmMessageQueue* slf, size_t time, DmMessageType type) {
+	for (size_t i = 0; i < slf->queue_length; ++i) {
+		int64_t delta = (int64_t) slf->queue[i]->data.time - (int64_t)time;
+		int64_t d = delta < 0 ? (delta * -1) : delta;
+		if (d < 10 && slf->queue[i]->data.type == type) {
+			return slf->queue[i];
+		}
+	}
+
+	return NULL;
+}
+
+void DmMessageQueue_add(DmMessageQueue* slf, DmMessage* msg, uint32_t time, DmQueueConflictResolution cr) {
 	if (slf == NULL || msg == NULL) {
 		return;
+	}
+
+	if (cr != DmQueueConflict_APPEND) {
+		DmMessageQueueItem* itm = DmMessageQueue_getAt(slf, time, msg->type);
+		if (itm != NULL) {
+			if (cr == DmQueueConflict_KEEP) {
+				return;
+			}
+
+			// else: REPLACE
+
+			DmMessage_free(&itm->data);
+			DmMessage_copy(msg, &itm->data, time);
+			return;
+		}
 	}
 
 	if (slf->queue_capacity == slf->queue_length) {
