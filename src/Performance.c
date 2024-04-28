@@ -68,15 +68,12 @@ void DmPerformance_release(DmPerformance* slf) {
 }
 
 static uint32_t DmPerformance_getBeatLength(DmTimeSignature sig) {
+	// Special case: If the beat 0, it indicates a 256th note instead
 	if (sig.beat == 0) {
-		return DmInt_PULSES_PER_QUARTER_NOTE / 64;
+		return (DmInt_PULSES_PER_QUARTER_NOTE * 4) / 256;
 	}
 
-	if (sig.beat <= 4) {
-		return DmInt_PULSES_PER_QUARTER_NOTE * (4 / sig.beat);
-	}
-
-	return DmInt_PULSES_PER_QUARTER_NOTE / (sig.beat / 4);
+	return (DmInt_PULSES_PER_QUARTER_NOTE * 4) / sig.beat;
 }
 
 static uint32_t DmPerformance_getMeasureLength(DmTimeSignature sig) {
