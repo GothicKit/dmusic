@@ -55,6 +55,12 @@ static void DmSegment_parseCommandItem(DmMessage_Command* slf, DmRiff* rif) {
 		slf->groove_range = 0;
 	}
 
+	// If the groove rand is odd, it is adjusted down.
+	// See https://documentation.help/DirectMusic/dmusiocommand.htm
+	if ((slf->groove_range % 2) != 0) {
+		slf->groove_range -= 1;
+	}
+
 	// In DirectMusic versions before DirectX 8, the repetition mode was always `RANDOM`, thus
 	// this byte is just padding. Just set it to `RANDOM` if it exceeds the maximum allowed value.
 	if (slf->repeat_mode > DmPatternSelect_RANDOM_ROW) {

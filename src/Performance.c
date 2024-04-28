@@ -603,7 +603,13 @@ static void DmPerformance_playPattern(DmPerformance* slf, DmPattern* pttn) {
 static void DmPerformance_handleCommandMessage(DmPerformance* slf, DmMessage_Command* msg) {
 	if (msg->command == DmCommand_GROOVE) {
 		slf->groove = msg->groove_level;
-		// TODO(lmichaelis): implement groove range randomization
+
+		// Randomize the groove level
+		if (msg->groove_range != 0) {
+			int rnd = rand() % msg->groove_range;
+			int range = rnd - (msg->groove_range / 2);
+			slf->groove = (uint32_t) max(msg->groove_level + range, 0);
+		}
 	} else {
 		Dm_report(DmLogLevel_WARN, "DmPerformance: Command message with command %d not implemented", msg->command);
 	}
