@@ -71,20 +71,16 @@ void DmSynth_sendBandUpdate(DmSynth* slf, DmBand* band) {
 		tsf* tsf = NULL;
 		DmResult rv = DmSynth_createTsfForInstrument(ins, &tsf);
 		if (rv != DmResult_SUCCESS) {
+			slf->channels[ins->channel] = NULL;
 			continue;
 		}
 
 		slf->channels[ins->channel] = tsf;
 
-		bool res = tsf_channel_set_bank_preset(tsf, 0, 0, 0);
-		if (!res) {
-			Dm_report(DmLogLevel_ERROR, "DmSynth: tsf_channel_set_bank_preset encountered an error.");
-		}
-
 		float pan = (ins->flags & DmInstrument_PAN) ? (float) ins->pan / 127.F : 0.5f;
 		float vol = (ins->flags & DmInstrument_VOLUME) ? (float) ins->volume / 127.F : 1.f;
 
-		res = tsf_channel_set_pan(tsf, 0, pan);
+		bool res = tsf_channel_set_pan(tsf, 0, pan);
 		if (!res) {
 			Dm_report(DmLogLevel_ERROR, "DmSynth: tsf_channel_set_pan encountered an error.");
 		}
@@ -105,6 +101,10 @@ void DmSynth_sendControl(DmSynth* slf, uint32_t channel, uint8_t control, float 
 		return;
 	}
 
+	if (slf->channels[channel] == NULL) {
+		return;
+	}
+
 	if (control == DmInt_MIDI_CC_VOLUME || control == DmInt_MIDI_CC_EXPRESSION) {
 		tsf_channel_set_volume(slf->channels[channel], 0, value);
 	}else if (control == DmInt_MIDI_CC_PAN) {
@@ -114,8 +114,24 @@ void DmSynth_sendControl(DmSynth* slf, uint32_t channel, uint8_t control, float 
 	}
 }
 
+void DmSynth_sendPitchBend(DmSynth* slf, uint32_t channel, int bend) {
+	if (slf == NULL || channel >= slf->channel_count) {
+		return;
+	}
+
+	if (slf->channels[channel] == NULL) {
+		return;
+	}
+
+	tsf_channel_set_pitchwheel(slf->channels[channel], 0, bend);
+}
+
 void DmSynth_sendNoteOn(DmSynth* slf, uint32_t channel, uint8_t note, uint8_t velocity) {
 	if (slf == NULL || channel >= slf->channel_count) {
+		return;
+	}
+
+	if (slf->channels[channel] == NULL) {
 		return;
 	}
 
@@ -155,6 +171,10 @@ void DmSynth_sendNoteOffEverything(DmSynth* slf) {
 	}
 
 	for (uint32_t i = 0; i < slf->channel_count; ++i) {
+		if (slf->channels[i] == NULL) {
+			continue;
+		}
+
 		DmSynth_sendNoteOffAll(slf, i);
 	}
 }

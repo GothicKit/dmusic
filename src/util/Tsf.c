@@ -1,7 +1,6 @@
 // Copyright © 2024. GothicKit Contributors
 // SPDX-License-Identifier: MIT-Modern-Variant
 #include "_Internal.h"
-#include <stdlib.h>
 #include <math.h>
 
 #include <tsf.h>
@@ -170,6 +169,8 @@ DmResult DmSynth_createTsfForInstrument(DmInstrument* slf, tsf** out) {
 	for (uint32_t i = 0; i < dls->region_count; ++i) {
 		DmDlsWave* wav = &slf->dls->wave_table[dls->regions[i].link_table_index];
 
+		strncpy(sample_headers[i].sampleName, wav->info.inam, 19);
+
 		sample_headers[i].start = sample_offset;
 		sample_headers[i].sampleRate = wav->samples_per_second;
 		sample_headers[i].sampleType = 1; // SFSampleLink::monoSample
@@ -262,7 +263,7 @@ DmResult DmSynth_createTsfForInstrument(DmInstrument* slf, tsf** out) {
 
 		gen = &instrument_generators[generator_index++];
 		gen->genOper = kSampleModes;
-		gen->genAmount.wordAmount = region->sample.looping;
+		gen->genAmount.wordAmount = region->sample.looping == true ? 1 : 0;
 
 		gen = &instrument_generators[generator_index++];
 		gen->genOper = kSampleID;
@@ -289,7 +290,7 @@ DmResult DmSynth_createTsfForInstrument(DmInstrument* slf, tsf** out) {
 	// 3. Generate preset-level articulators
 
 	struct tsf_hydra_pbag preset_zones[2];      // One for the sentinel
-	struct tsf_hydra_pgen preset_generators[2];// One for the sentinel
+	struct tsf_hydra_pgen preset_generators[2]; // One for the sentinel
 	struct tsf_hydra_pmod preset_modulators[1]; // Only the sentinel
 
 	preset_generators[0].genOper = kInstrument;
@@ -304,7 +305,6 @@ DmResult DmSynth_createTsfForInstrument(DmInstrument* slf, tsf** out) {
 	preset_zones[0].modNdx = 0;
 	preset_zones[1].genNdx = (tsf_u16) generator_index;
 	preset_zones[1].modNdx = 0;
-
 
 	// 4. Finalize the instrument and preset
 	struct tsf_hydra_phdr preset_headers[2]; // One for the sentinel
@@ -369,10 +369,12 @@ DmResult DmSynth_createTsfForInstrument(DmInstrument* slf, tsf** out) {
 	res->outSampleRate = 44100.0F;
 	res->fontSamples = samples;
 
-	if (!tsf_set_max_voices(res, (int) (dls->region_count * 2))) {
+	if (!tsf_set_max_voices(res, (int) (dls->region_count * 4))) {
 		Dm_report(DmLogLevel_ERROR, "DmSynth: Failed to set tsf voice count");
 		return DmResult_INTERNAL_ERROR;
 	}
+
+	tsf_channel_set_bank_preset(res, 0, 0, 0);
 
 	Dm_free(sample_headers);
 	Dm_free(instrument_zones);

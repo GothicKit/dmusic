@@ -234,6 +234,7 @@ typedef enum DmMessageType {
 	DmMessage_PATTERN,
 	DmMessage_CONTROL,
 	DmMessage_NOTE,
+	DmMessage_PITCH_BEND,
 } DmMessageType;
 
 typedef struct DmMessage_Tempo {
@@ -312,6 +313,14 @@ typedef struct DmMessage_Control {
 	uint32_t channel;
 } DmMessage_Control;
 
+typedef struct DmMessage_PitchBend {
+	DmMessageType type;
+	uint32_t time;
+
+	uint32_t channel;
+	int value;
+} DmMessage_PitchBend;
+
 typedef union DmMessage {
 	struct {
 		DmMessageType type;
@@ -326,6 +335,7 @@ typedef union DmMessage {
 	DmMessage_SegmentChange segment;
 	DmMessage_Note note;
 	DmMessage_Control control;
+	DmMessage_PitchBend pitch_bend;
 } DmMessage;
 
 DmArray_DEFINE(DmMessageList, DmMessage);
@@ -379,7 +389,7 @@ typedef struct DmMessageQueue {
 	DmMessageQueueItem* free;
 	struct DmMessageQueueBlock {
 		struct DmMessageQueueBlock* next;
-	} *blocks;
+	}* blocks;
 } DmMessageQueue;
 
 struct DmPerformance {
@@ -449,6 +459,7 @@ DMINT void DmSynth_init(DmSynth* slf);
 DMINT void DmSynth_free(DmSynth* slf);
 DMINT void DmSynth_sendBandUpdate(DmSynth* slf, DmBand* band);
 DMINT void DmSynth_sendControl(DmSynth* slf, uint32_t channel, uint8_t control, float value);
+DMINT void DmSynth_sendPitchBend(DmSynth* slf, uint32_t channel, int bend);
 DMINT void DmSynth_sendNoteOn(DmSynth* slf, uint32_t channel, uint8_t note, uint8_t velocity);
 DMINT void DmSynth_sendNoteOff(DmSynth* slf, uint32_t channel, uint8_t note);
 DMINT void DmSynth_sendNoteOffAll(DmSynth* slf, uint32_t channel);
