@@ -8,6 +8,10 @@ static int32_t max(int32_t a, int32_t b) {
 	return a > b ? a : b;
 }
 
+enum {
+	DmInt_PULSES_PER_QUARTER_NOTE = 768,
+};
+
 DmResult DmPerformance_create(DmPerformance** slf) {
 	if (slf == NULL) {
 		return DmResult_INVALID_ARGUMENT;
@@ -62,17 +66,44 @@ void DmPerformance_release(DmPerformance* slf) {
 	Dm_free(slf);
 }
 
+static uint32_t DmPerformance_getBeatLength(DmTimeSignature sig) {
+	if (sig.beat == 0) {
+		return DmInt_PULSES_PER_QUARTER_NOTE / 64;
+	} else if (sig.beat <= 4) {
+		return DmInt_PULSES_PER_QUARTER_NOTE * (4 / sig.beat);
+	} else {
+		return DmInt_PULSES_PER_QUARTER_NOTE / (sig.beat / 4);
+	}
+}
+
+static uint32_t DmPerformance_getMeasureLength(DmTimeSignature sig) {
+	return sig.beats_per_measure * DmPerformance_getBeatLength(sig);
+}
+
 // See https://documentation.help/DirectMusic/dmussegfflags.htm
 static uint32_t DmPerformance_getStartTime(DmPerformance* slf, DmPlaybackFlags flags) {
-	// TODO(lmichaelis): implement start time calculations
-	if (flags & DmPlayback_QUEUE) {
-	} else if (flags & DmPlayback_GRID) {
-	} else if (flags & DmPlayback_BEAT) {
-	} else if (flags & DmPlayback_MEASURE) {
-	} else if (flags & DmPlayback_SEGMENT_END) {
-	} else if (flags & DmPlayback_MARKER) {
+	if (flags & DmPlayback_BEAT) {
+		uint32_t beat_length = DmPerformance_getBeatLength(slf->time_signature);
+
+		uint32_t time_to_next_beat = beat_length;
+		if (slf->segment_start != 0) {
+			time_to_next_beat = beat_length - (slf->time % slf->segment_start);
+		}
+
+		return slf->time + time_to_next_beat;
 	}
 
+	if (flags & DmPlayback_MEASURE) {
+		uint32_t measure_length = DmPerformance_getMeasureLength(slf->time_signature);
+		uint32_t time_to_next_measure = measure_length;
+
+		if (slf->segment_start != 0) {
+			time_to_next_measure =  measure_length - (slf->time % slf->segment_start);
+		}
+		return slf->time + time_to_next_measure;
+	}
+
+	Dm_report(DmLogLevel_ERROR, "DmPerformance: Playback flags %d not supported", flags);
 	return slf->time;
 }
 
@@ -100,10 +131,6 @@ DmResult DmPerformance_playSegment(DmPerformance* slf, DmSegment* sgt, DmPlaybac
 
 	return DmResult_SUCCESS;
 }
-
-enum {
-	DmInt_PULSES_PER_QUARTER_NOTE = 768,
-};
 
 static uint32_t DmPerformance_commandToEmbellishment(DmCommandType cmd) {
 	switch (cmd) {
@@ -181,20 +208,6 @@ static DmPattern* DmPerformance_choosePattern(DmPerformance* slf, DmCommandType 
 	}
 
 	return NULL;
-}
-
-static uint32_t DmPerformance_getBeatLength(DmTimeSignature sig) {
-	if (sig.beat == 0) {
-		return DmInt_PULSES_PER_QUARTER_NOTE / 64;
-	} else if (sig.beat <= 4) {
-		return DmInt_PULSES_PER_QUARTER_NOTE * (4 / sig.beat);
-	} else {
-		return DmInt_PULSES_PER_QUARTER_NOTE / (sig.beat / 4);
-	}
-}
-
-static uint32_t DmPerformance_getMeasureLength(DmTimeSignature sig) {
-	return sig.beats_per_measure * DmPerformance_getBeatLength(sig);
 }
 
 static uint32_t DmPerformance_getTimeOffset(uint32_t grid_start, int32_t time_offset, DmTimeSignature sig) {
@@ -438,6 +451,8 @@ static void DmPerformance_playPattern(DmPerformance* slf, DmPattern* pttn) {
 		variation_lock[i] = -1;
 	}
 
+	slf->time_signature = pttn->time_signature;
+
 	for (size_t i = 0; i < pttn->parts.length; ++i) {
 		DmPartReference* pref = &pttn->parts.data[i];
 		DmPart* part = DmStyle_findPart(slf->style, pref);
@@ -621,13 +636,6 @@ static void DmPerformance_playPattern(DmPerformance* slf, DmPattern* pttn) {
 		}
 	}
 
-	uint32_t pattern_length = DmPerformance_getMeasureLength(pttn->time_signature) * pttn->length_measures;
-	DmMessage msg;
-	msg.type = DmMessage_PATTERN;
-	msg.time = 0;
-
-	DmMessageQueue_add(&slf->music_queue, &msg, slf->time + pattern_length);
-
 	slf->variation += 1;
 }
 
@@ -641,7 +649,7 @@ static void DmPerformance_handleCommandMessage(DmPerformance* slf, DmMessage_Com
 			int range = rnd - (msg->groove_range / 2);
 			slf->groove = (uint32_t) max(msg->groove_level + range, 0);
 		}
-	} else {
+	} else if (msg->command == DmCommand_END_AND_INTRO) {
 		Dm_report(DmLogLevel_WARN, "DmPerformance: Command message with command %d not implemented", msg->command);
 	}
 
@@ -682,6 +690,7 @@ static void DmPerformance_handleMessage(DmPerformance* slf, DmMessage* msg) {
 
 		DmSegment_release(slf->segment);
 		slf->segment = DmSegment_retain(sgt);
+		slf->segment_start = slf->time;
 
 		if (msg->segment.loop < sgt->repeats) {
 			DmMessage m;

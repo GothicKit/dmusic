@@ -228,6 +228,7 @@ typedef struct DmStyle {
 	DmPatternList patterns;
 } DmStyle;
 
+// NOTE: Ordered by priority
 typedef enum DmMessageType {
 	DmMessage_NOTE = 0,
 	DmMessage_CONTROL,
@@ -417,6 +418,7 @@ struct DmPerformance {
 	DmMessageQueue music_queue;
 
 	DmSegment* segment;
+	uint32_t segment_start;
 	DmStyle* style;
 	DmSynth synth;
 
@@ -425,6 +427,7 @@ struct DmPerformance {
 	uint32_t groove;
 	double tempo;
 	DmMessage_Chord chord;
+	DmTimeSignature time_signature;
 
 	int pitch_bend_reset;
 	float volume_reset;
