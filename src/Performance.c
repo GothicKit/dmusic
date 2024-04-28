@@ -197,14 +197,12 @@ static uint32_t DmPerformance_getMeasureLength(DmTimeSignature sig) {
 	return sig.beats_per_measure * DmPerformance_getBeatLength(sig);
 }
 
-static uint32_t
-DmPerformance_getTimeOffset(uint32_t grid_start, int32_t time_offset, DmTimeSignature sig) {
+static uint32_t DmPerformance_getTimeOffset(uint32_t grid_start, int32_t time_offset, DmTimeSignature sig) {
 	const uint32_t DMUS_PPQ = DmInt_PULSES_PER_QUARTER_NOTE;
 	const uint32_t PPN = (DMUS_PPQ * 4) / sig.beat;
 
 	return (uint32_t) time_offset +
-	    ((grid_start / sig.grids_per_beat) * PPN +
-	    (grid_start % sig.grids_per_beat) * (PPN / sig.grids_per_beat));
+	    ((grid_start / sig.grids_per_beat) * PPN + (grid_start % sig.grids_per_beat) * (PPN / sig.grids_per_beat));
 }
 
 static uint32_t DmInt_DEFAULT_SCALE_PATTERN = 0xab5ab5;
@@ -414,6 +412,22 @@ static float lerp(float x, float start, float end) {
 	return (1 - x) * start + x * end;
 }
 
+// See https://documentation.help/DirectMusic/dmusiostylenote.htm
+static uint32_t DmPerformance_convertIoTimeRange(uint8_t range) {
+	uint32_t result = 0;
+	if (0 <= range && range <= 190) {
+		result = range;
+	} else if (191 <= range && range <= 212) {
+		result = ((range - 190) * 5) + 190;
+	} else if (213 <= range && range <= 232) {
+		result = ((range - 212) * 10) + 300;
+	} else {
+		// range > 232
+		result = ((range - 232) * 50) + 500;
+	}
+	return result;
+}
+
 static void DmPerformance_playPattern(DmPerformance* slf, DmPattern* pttn) {
 	DmSynth_reset(&slf->synth);
 	DmMessageQueue_clear(&slf->music_queue);
@@ -486,9 +500,26 @@ static void DmPerformance_playPattern(DmPerformance* slf, DmPattern* pttn) {
 				continue;
 			}
 
-			// TODO(lmichaelis): Randomize note start, velocity and duration
-			uint32_t note_start = DmPerformance_getTimeOffset(note.grid_start, note.time_offset, part->time_signature);
+			uint32_t time = DmPerformance_getTimeOffset(note.grid_start, note.time_offset, part->time_signature);
+
+			if (note.time_range != 0) {
+				uint32_t range = DmPerformance_convertIoTimeRange(note.time_range);
+				uint32_t rnd = (uint32_t) rand() % range;
+				time -= range - (rnd / 2);
+			}
+
+			uint32_t velocity = note.velocity;
+			if (note.velocity_range != 0) {
+				uint32_t rnd = (uint32_t) rand() % note.velocity_range;
+				velocity -= note.velocity_range - (rnd / 2);
+			}
+
 			uint32_t duration = note.duration;
+			if (note.duration_range != 0) {
+				uint32_t range = DmPerformance_convertIoTimeRange(note.duration_range);
+				uint32_t rnd = (uint32_t) rand() % range;
+				duration -= range - (rnd / 2);
+			}
 
 			DmMessage msg;
 			msg.type = DmMessage_NOTE;
@@ -496,15 +527,15 @@ static void DmPerformance_playPattern(DmPerformance* slf, DmPattern* pttn) {
 
 			msg.note.on = true;
 			msg.note.note = (uint8_t) midi;
-			msg.note.velocity = note.velocity;
+			msg.note.velocity = (uint8_t) velocity;
 			msg.note.channel = pref->logical_part_id;
 
-			DmMessageQueue_add(&slf->music_queue, &msg, slf->time + note_start);
+			DmMessageQueue_add(&slf->music_queue, &msg, slf->time + time);
 
 			msg.note.on = false;
 			msg.note.note = (uint8_t) midi;
 
-			DmMessageQueue_add(&slf->music_queue, &msg, slf->time + note_start + duration);
+			DmMessageQueue_add(&slf->music_queue, &msg, slf->time + time + duration);
 		}
 
 		for (size_t j = 0; j < part->curve_count; ++j) {
