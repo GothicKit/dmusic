@@ -274,6 +274,11 @@ DmResult DmSynth_createTsfForInstrument(DmInstrument* slf, tsf** out) {
 			uint32_t offset = sample_headers[i].start;
 			sample_headers[i].startLoop = offset + region->sample.loop_start;
 			sample_headers[i].endLoop = offset + region->sample.loop_start + region->sample.loop_length;
+
+			// NOTE: Fix for sound cutting off too early. When using TSF.
+			if (sample_headers[i].endLoop > sample_headers[i].end) {
+				sample_headers[i].endLoop = sample_headers[i].end;
+			}
 		} else {
 			sample_headers[i].startLoop = 0;
 			sample_headers[i].endLoop = 0;
