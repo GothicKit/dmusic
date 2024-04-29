@@ -4,7 +4,6 @@
 
 #include <stdarg.h>
 #include <stdio.h>
-#include <threads.h>
 #include <time.h>
 
 enum { DmGlob_logBufferSize = 4096 };
@@ -14,7 +13,7 @@ static void DmInt_defaultLogger(void* ctx, DmLogLevel lvl, char const* msg);
 static DmLogLevel DmGlob_logLevel = DmLogLevel_INFO;
 static DmLogHandler* DmGlob_logCallback = NULL;
 static void* DmGlob_logContext = NULL;
-static thread_local char DmGlob_logBuffer[DmGlob_logBufferSize];
+static char DmGlob_logBuffer[DmGlob_logBufferSize];
 
 void Dm_setLogger(DmLogLevel lvl, DmLogHandler* log, void* ctx) {
 	DmGlob_logCallback = log;
