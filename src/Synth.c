@@ -102,6 +102,8 @@ void DmSynth_sendBandUpdate(DmSynth* slf, DmBand* band) {
 		float pan = (ins->flags & DmInstrument_PAN) ? (float) ins->pan / DmInt_MIDI_MAX : DmInt_PAN_CENTER;
 		float vol = (ins->flags & DmInstrument_VOLUME) ? (float) ins->volume / DmInt_MIDI_MAX : DmInt_VOLUME_MAX;
 
+		tsf_set_volume(t, 1.0f);
+
 		bool res = tsf_channel_set_pan(t, 0, pan);
 		if (!res) {
 			Dm_report(DmLogLevel_ERROR, "DmSynth: tsf_channel_set_pan encountered an error.");
@@ -241,12 +243,10 @@ size_t DmSynth_render(DmSynth* slf, void* buf, size_t len, DmRenderOptions fmt) 
 			tsf_set_output(slf->channels[i].synth, TSF_MONO, 44100, 0);
 		}
 
-		tsf_set_volume(slf->channels[i].synth, slf->channels[i].volume);
-
 		if (fmt & DmRender_FLOAT) {
-			tsf_render_float(slf->channels[i].synth, buf, (int) len / channels, true);
+			tsf_render_float(slf->channels[i].synth, buf, (int) len / channels, true, slf->channels[i].volume);
 		} else {
-			tsf_render_short(slf->channels[i].synth, buf, (int) len / channels, true);
+			tsf_render_short(slf->channels[i].synth, buf, (int) len / channels, true, slf->channels[i].volume);
 		}
 	}
 

@@ -167,8 +167,8 @@ TSFDEF int tsf_active_voice_count(tsf* f);
 //   buffer: target buffer of size samples * output_channels * sizeof(type)
 //   samples: number of samples to render
 //   flag_mixing: if 0 clear the buffer first, otherwise mix into existing data
-TSFDEF void tsf_render_short(tsf* f, short* buffer, int samples, int flag_mixing CPP_DEFAULT0);
-TSFDEF void tsf_render_float(tsf* f, float* buffer, int samples, int flag_mixing CPP_DEFAULT0);
+TSFDEF void tsf_render_short(tsf* f, short* buffer, int samples, int flag_mixing, float factor);
+TSFDEF void tsf_render_float(tsf* f, float* buffer, int samples, int flag_mixing, float factor);
 
 // Higher level channel based functions, set up channel parameters
 //   channel: channel number
@@ -1172,7 +1172,7 @@ static void tsf_voice_calcpitchratio(struct tsf_voice* v, float pitchShift, floa
 	v->pitchOutputFactor = v->region->sample_rate / (tsf_timecents2Secsd(v->region->pitch_keycenter * 100.0) * outSampleRate);
 }
 
-static void tsf_voice_render(tsf* f, struct tsf_voice* v, float* outputBuffer, int numSamples)
+static void tsf_voice_render(tsf* f, struct tsf_voice* v, float* outputBuffer, int numSamples, float factor)
 {
 	struct tsf_region* region = v->region;
 	float* input = f->fontSamples;
@@ -1252,8 +1252,8 @@ static void tsf_voice_render(tsf* f, struct tsf_voice* v, float* outputBuffer, i
 					// Low-pass filter.
 					if (tmpLowpass.active) val = tsf_voice_lowpass_process(&tmpLowpass, val);
 
-					*outL++ += val * gainLeft;
-					*outL++ += val * gainRight;
+					*outL++ += val * gainLeft * factor;
+					*outL++ += val * gainRight * factor;
 
 					// Next sample.
 					tmpSourceSamplePosition += pitchRatio;
@@ -1273,8 +1273,8 @@ static void tsf_voice_render(tsf* f, struct tsf_voice* v, float* outputBuffer, i
 					// Low-pass filter.
 					if (tmpLowpass.active) val = tsf_voice_lowpass_process(&tmpLowpass, val);
 
-					*outL++ += val * gainLeft;
-					*outR++ += val * gainRight;
+					*outL++ += val * gainLeft * factor;
+					*outR++ += val * gainRight * factor;
 
 					// Next sample.
 					tmpSourceSamplePosition += pitchRatio;
@@ -1293,7 +1293,7 @@ static void tsf_voice_render(tsf* f, struct tsf_voice* v, float* outputBuffer, i
 					// Low-pass filter.
 					if (tmpLowpass.active) val = tsf_voice_lowpass_process(&tmpLowpass, val);
 
-					*outL++ += val * gainMono;
+					*outL++ += val * gainMono * factor;
 
 					// Next sample.
 					tmpSourceSamplePosition += pitchRatio;
@@ -1661,7 +1661,7 @@ TSFDEF int tsf_active_voice_count(tsf* f)
 	return count;
 }
 
-TSFDEF void tsf_render_short(tsf* f, short* buffer, int samples, int flag_mixing)
+TSFDEF void tsf_render_short(tsf* f, short* buffer, int samples, int flag_mixing, float factor)
 {
 	float outputSamples[TSF_RENDER_SHORTBUFFERBLOCK];
 	int channels = (f->outputmode == TSF_MONO ? 1 : 2), maxChannelSamples = TSF_RENDER_SHORTBUFFERBLOCK / channels;
@@ -1670,7 +1670,7 @@ TSFDEF void tsf_render_short(tsf* f, short* buffer, int samples, int flag_mixing
 		int channelSamples = (samples > maxChannelSamples ? maxChannelSamples : samples);
 		short* bufferEnd = buffer + channelSamples * channels;
 		float *floatSamples = outputSamples;
-		tsf_render_float(f, floatSamples, channelSamples, TSF_FALSE);
+		tsf_render_float(f, floatSamples, channelSamples, TSF_FALSE, factor);
 		samples -= channelSamples;
 
 		if (flag_mixing)
@@ -1689,13 +1689,13 @@ TSFDEF void tsf_render_short(tsf* f, short* buffer, int samples, int flag_mixing
 	}
 }
 
-TSFDEF void tsf_render_float(tsf* f, float* buffer, int samples, int flag_mixing)
+TSFDEF void tsf_render_float(tsf* f, float* buffer, int samples, int flag_mixing, float factor)
 {
 	struct tsf_voice *v = f->voices, *vEnd = v + f->voiceNum;
 	if (!flag_mixing) TSF_MEMSET(buffer, 0, (f->outputmode == TSF_MONO ? 1 : 2) * sizeof(float) * samples);
 	for (; v != vEnd; v++)
 		if (v->playingPreset != -1)
-			tsf_voice_render(f, v, buffer, samples);
+			tsf_voice_render(f, v, buffer, samples, factor);
 }
 
 static void tsf_channel_setup_voice(tsf* f, struct tsf_voice* v)
