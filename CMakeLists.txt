@@ -56,8 +56,3 @@ set_target_properties(dmusic PROPERTIES
 
 install(TARGETS dmusic ARCHIVE LIBRARY RUNTIME)
 install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/include" TYPE INCLUDE)
-
-add_executable(test test.c)
-target_link_libraries(test PRIVATE dmusic)
-target_link_options(test PRIVATE -fsanitize=address -fsanitize=undefined -fsanitize=leak)
-target_compile_options(test PRIVATE -fsanitize=address -fsanitize=undefined -fsanitize=leak)
