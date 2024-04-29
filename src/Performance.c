@@ -162,6 +162,11 @@ static DmPattern* DmPerformance_choosePattern(DmPerformance* slf, DmCommandType 
 			continue;
 		}
 
+		// Fix for Gothic 2 in which some patterns are empty but have a groove range of 1-100 with no embellishment set.
+		if (pttn->embellishment == DmCommand_GROOVE && pttn->length_measures == 1) {
+			continue;
+		}
+
 		suitable_pattern_index = i;
 		suitable_pattern_count += 1;
 	}
