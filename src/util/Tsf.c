@@ -82,14 +82,44 @@ static size_t DmSynth_convertGeneratorArticulators(struct tsf_hydra_igen* gens, 
 			gen->genAmount.shortAmount = sf2SecondsToTimeCents(dlsTimeCentsToSeconds(con->scale));
 			break;
 		case DmDlsArticulatorDestination_EG1_SUSTAIN_LEVEL:
-			// FIXME: This is not correct! The DLS value is in 0.1% and the SF2 value is in "centibels"
+			// SF2 Spec:
+			//     This is the decrease in level, expressed in centibels, to which the Volume Envelope
+			//     value ramps during the decay phase. For the Volume Envelope, the sustain level is
+			//     best expressed in centibels of attenuation from full scale. A value of 0 indicates the
+			//     sustain level is full level; this implies a zero duration of decay phase regardless of
+			//     decay time. A positive value indicates a decay to the corresponding level. Values
+			//     less than zero are to be interpreted as zero; conventionally 1000 indicates full
+			//     attenuation. For example, a sustain level which corresponds to an absolute value
+			//     12dB below of peak would be 120.
+			//
+			// Thus, since the DLS value in in 0.1% steps and 100 indicates "no attenuation", we can simply
+			// convert the DLS value into percent and set the SF2 sustainVolEnv to `1000 * (1 - dls)`.
 			gen->genOper = kSustainVolEnv;
-			gen->genAmount.shortAmount = sf2SecondsToTimeCents(dlsTimeCentsToSeconds(con->scale));
+			gen->genAmount.shortAmount = (tsf_s16) (1000. * (1. - (0.1 * con->scale)));
 			break;
-		case DmDlsArticulatorDestination_EG2_SUSTAIN_LEVEL:
-			// FIXME: This is not correct! The DLS value is in 0.1% and the SF2 value is in "centibels"
+		case DmDlsArticulatorDestination_EG2_SUSTAIN_LEVEL: {
+			// SF2 Spec:
+			//     This is the decrease in level, expressed in 0.1% units, to which the Modulation
+			//     Envelope value ramps during the decay phase. For the Modulation Envelope, the
+			//     sustain level is properly expressed in percent of full scale. Because the volume
+			//     envelope sustain level is expressed as an attenuation from full scale, the sustain level
+			//     is analogously expressed as a decrease from full scale. A value of 0 indicates the
+			//     sustain level is full level; this implies a zero duration of decay phase regardless of
+			//     decay time. A positive value indicates a decay to the corresponding level. Values
+			//     less than zero are to be interpreted as zero; values above 1000 are to be interpreted as
+			//     1000. For example, a sustain level which corresponds to an absolute value 40% of
+			//     peak would be 600.
+			//
+			// Thus, we just need to invert the DLS value.
+			int32_t clamped = con->scale;
+			if (clamped < 0) {
+				clamped = 0;
+			} else if (clamped > 1000) {
+				clamped = 1000;
+			}
+
 			gen->genOper = kSustainModEnv;
-			gen->genAmount.shortAmount = sf2SecondsToTimeCents(dlsTimeCentsToSeconds(con->scale));
+			gen->genAmount.shortAmount = ((tsf_s16) (1000 - clamped));
 			break;
 		default:
 			Dm_report(DmLogLevel_WARN, "DmSynth: Unknown Instrument Generator: %d", con->destination);
