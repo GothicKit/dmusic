@@ -435,8 +435,6 @@ static void DmPerformance_playPattern(DmPerformance* slf, DmPattern* pttn) {
 	DmMessageQueue_clear(&slf->music_queue);
 	DmSynth_sendNoteOffEverything(&slf->synth);
 
-	Dm_report(DmLogLevel_DEBUG, "DmPerformance: Playing pattern '%s'", pttn->info.unam);
-
 	int variation_lock[256];
 	for (size_t i = 0; i < 256; ++i) {
 		variation_lock[i] = -1;
@@ -635,6 +633,12 @@ static void DmPerformance_playPattern(DmPerformance* slf, DmPattern* pttn) {
 
 	uint32_t pattern_length = Dm_getMeasureLength(slf->time_signature) * pttn->length_measures;
 	DmMessageQueue_add(&slf->music_queue, &msg, slf->time + pattern_length, DmQueueConflict_KEEP);
+
+	Dm_report(DmLogLevel_INFO,
+	          "DmPerformance: Playing pattern '%s' (measure %d, length %d)",
+	          pttn->info.unam,
+	          slf->time / Dm_getMeasureLength(slf->time_signature) + 1,
+	          pttn->length_measures);
 
 	slf->variation += 1;
 }
