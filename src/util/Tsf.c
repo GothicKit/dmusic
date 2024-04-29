@@ -14,6 +14,7 @@ static int16_t sf2SecondsToTimeCents(double secs) {
 }
 
 enum {
+	kInitialFilterFc = 8,
 	kPan = 17,
 	kAttackModEnv = 26,
 	kDecayModEnv = 28,
@@ -120,6 +121,17 @@ static size_t DmSynth_convertGeneratorArticulators(struct tsf_hydra_igen* gens, 
 
 			gen->genOper = kSustainModEnv;
 			gen->genAmount.shortAmount = ((tsf_s16) (1000 - clamped));
+			break;
+		}
+		case DmDlsArticulatorDestination_FILTER_CUTOFF:
+			// SF2 Spec:
+			//     This is the cutoff and resonant frequency of the lowpass filter in absolute cent units.
+			//     The lowpass filter is defined as a second order resonant pole pair whose pole
+			//     frequency in Hz is defined by the Initial Filter Cutoff parameter. When the cutoff
+			//     frequency exceeds 20kHz and the Q (resonance) of the filter is zero, the filter does
+			//     not affect the signal.
+			gen->genOper = kInitialFilterFc;
+			gen->genAmount.shortAmount = sf2SecondsToTimeCents(dlsTimeCentsToSeconds(con->scale));
 			break;
 		default:
 			Dm_report(DmLogLevel_WARN, "DmSynth: Unknown Instrument Generator: %d", con->destination);
