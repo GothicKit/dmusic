@@ -28,10 +28,15 @@ typedef enum DmDlsArticulatorSource {
 	DmDlsArticulatorSource_EG1 = 4,
 	DmDlsArticulatorSource_EG2 = 5,
 	DmDlsArticulatorSource_PITCH_WEEL = 6,
+	DmDlsArticulatorSource_POLY_PRESSURE = 7,
+	DmDlsArticulatorSource_CHANNEL_PRESSURE = 8,
+	DmDlsArticulatorSource_VIBRATO = 9,
 	DmDlsArticulatorSource_CC1 = 0x81,
 	DmDlsArticulatorSource_CC7 = 0x87,
 	DmDlsArticulatorSource_CC10 = 0x8a,
 	DmDlsArticulatorSource_CC11 = 0x8b,
+	DmDlsArticulatorSource_CC91 = 0xdb,
+	DmDlsArticulatorSource_CC93 = 0xdd,
 	DmDlsArticulatorSource_RPN0 = 0x100,
 	DmDlsArticulatorSource_RPN1 = 0x101,
 	DmDlsArticulatorSource_RPN2 = 0x102,
@@ -42,21 +47,41 @@ typedef enum DmDlsArticulatorDestination {
 	DmDlsArticulatorDestination_ATTENUATION = 1,
 	DmDlsArticulatorDestination_PITCH = 3,
 	DmDlsArticulatorDestination_PAN = 4,
+	DmDlsArticulatorDestination_KEY_NUMBER = 5,
+	DmDlsArticulatorDestination_LEFT = 0x10,
+	DmDlsArticulatorDestination_RIGHT = 0x11,
+	DmDlsArticulatorDestination_CENTER = 0x12,
+	DmDlsArticulatorDestination_LFE_CHANNEL = 0x13,
+	DmDlsArticulatorDestination_LEFT_REAR = 0x14,
+	DmDlsArticulatorDestination_RIGHT_REAR = 0x15,
+	DmDlsArticulatorDestination_CHORUS = 0x80,
+	DmDlsArticulatorDestination_REVERB = 0x01,
 	DmDlsArticulatorDestination_LFO_FREQUENCY = 0x104,
 	DmDlsArticulatorDestination_LFO_START_DELAY = 0x105,
+	DmDlsArticulatorDestination_VIB_FREQUENCY = 0x114,
+	DmDlsArticulatorDestination_VIB_START_DELAY = 0x115,
 	DmDlsArticulatorDestination_EG1_ATTACK_TIME = 0x206,
 	DmDlsArticulatorDestination_EG1_DECAY_TIME = 0x207,
 	DmDlsArticulatorDestination_EG1_RELEASE_TIME = 0x209,
 	DmDlsArticulatorDestination_EG1_SUSTAIN_LEVEL = 0x20a,
+	DmDlsArticulatorDestination_EG1_DELAY_TIME = 0x20b,
+	DmDlsArticulatorDestination_EG1_HOLD_TIME = 0x20c,
+	DmDlsArticulatorDestination_EG1_SHUTDOWN_TIME = 0x20d,
 	DmDlsArticulatorDestination_EG2_ATTACK_TIME = 0x30a,
 	DmDlsArticulatorDestination_EG2_DECAY_TIME = 0x30b,
 	DmDlsArticulatorDestination_EG2_RELEASE_TIME = 0x30d,
 	DmDlsArticulatorDestination_EG2_SUSTAIN_LEVEL = 0x30e,
+	DmDlsArticulatorDestination_EG2_DELAY_TIME = 0x30f,
+	DmDlsArticulatorDestination_EG2_HOLD_TIME = 0x310,
+	DmDlsArticulatorDestination_FILTER_CUTOFF = 0x500,
+	DmDlsArticulatorDestination_FILTER_Q = 0x501,
 } DmDlsArticulatorDestination;
 
 typedef enum DmDlsArticulatorTransform {
 	DmDlsArticulatorTransform_NONE = 0,
 	DmDlsArticulatorTransform_CONCAVE = 1,
+	DmDlsArticulatorTransform_CONVEX = 2,
+	DmDlsArticulatorTransform_SWITCH = 3,
 } DmDlsArticulatorTransform;
 
 typedef struct DmDlsWaveSample {
@@ -72,6 +97,7 @@ typedef struct DmDlsWaveSample {
 } DmDlsWaveSample;
 
 typedef struct DmDlsArticulator {
+	uint8_t level;
 	uint32_t connection_count;
 	struct DmDlsArticulatorConnection {
 		DmDlsArticulatorSource source;

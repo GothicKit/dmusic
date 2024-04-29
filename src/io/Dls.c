@@ -64,11 +64,15 @@ static DmResult DmDls_parseArticulatorList(DmDlsArticulator* lst, DmRiff* rif, s
 			return DmResult_FILE_CORRUPT;
 		}
 
-		if (!DmRiff_is(&cnk, DM_FOURCC_ART1, 0)) {
+		bool level1 = DmRiff_is(&cnk, DM_FOURCC_ART1, 0);
+		bool level2 = DmRiff_is(&cnk, DM_FOURCC_ART2, 0);
+		if (!level1 && !level2) {
 			return DmResult_FILE_CORRUPT;
 		}
 
 		DmDlsArticulator_init(&lst[i]);
+		lst[i].level = level2 ? 2 : 1;
+
 		DmResult rv = DmDls_parseArticulator(&lst[i], &cnk);
 		if (rv != DmResult_SUCCESS) {
 			return rv;
@@ -104,7 +108,21 @@ static DmResult DmDls_parseRegion(DmDlsRegion* slf, DmRiff* rif) {
 			DmRiff_readWord(&cnk, &slf->link_phase_group);
 			DmRiff_readDword(&cnk, &slf->link_channel);
 			DmRiff_readDword(&cnk, &slf->link_table_index);
-		} else if (DmRiff_is(&cnk, DM_FOURCC_LIST, DM_FOURCC_LART)) {
+		} else if (DmRiff_is(&cnk, DM_FOURCC_LIST, DM_FOURCC_LART) || DmRiff_is(&cnk, DM_FOURCC_LIST, DM_FOURCC_LAR2)) {
+			// We can only accept either lart or lar2, not both. lar2 takes precedence, though.
+			if (slf->articulator_count != 0 && !DmRiff_is(&cnk, DM_FOURCC_LIST, DM_FOURCC_LAR2)) {
+				continue;
+			}
+
+			// If we're overriding lart, we need to free all the exising articulators
+			if (slf->articulators != NULL) {
+				for (size_t i = 0; i < slf->articulator_count; ++i)  {
+					DmDlsArticulator_free(&slf->articulators[i]);
+				}
+
+				Dm_free(slf->articulators);
+			}
+
 			slf->articulator_count = DmRiff_chunks(&cnk);
 			slf->articulators = Dm_alloc(slf->articulator_count * sizeof(DmDlsArticulator));
 
@@ -167,7 +185,20 @@ static DmResult DmDls_parseInstrument(DmDlsInstrument* slf, DmRiff* rif) {
 			DmInfo_parse(&slf->info, &cnk);
 		} else if (DmRiff_is(&cnk, DM_FOURCC_LIST, DM_FOURCC_LRGN)) {
 			rv = DmDls_parseInstrumentRegionList(slf, &cnk);
-		} else if (DmRiff_is(&cnk, DM_FOURCC_LIST, DM_FOURCC_LART)) {
+		} else if (DmRiff_is(&cnk, DM_FOURCC_LIST, DM_FOURCC_LART) || DmRiff_is(&cnk, DM_FOURCC_LIST, DM_FOURCC_LAR2)) {
+			// We can only accept either lart or lar2, not both. lar2 takes precedence, though.
+			if (slf->articulator_count != 0 && !DmRiff_is(&cnk, DM_FOURCC_LIST, DM_FOURCC_LAR2)) {
+				continue;
+			}
+
+			// If we're overriding lart, we need to free all the exising articulators
+			if (slf->articulators != NULL) {
+				for (size_t i = 0; i < slf->articulator_count; ++i)  {
+					DmDlsArticulator_free(&slf->articulators[i]);
+				}
+
+				Dm_free(slf->articulators);
+			}
 			slf->articulator_count = DmRiff_chunks(&cnk);
 			slf->articulators = Dm_alloc(slf->articulator_count * sizeof(DmDlsArticulator));
 
