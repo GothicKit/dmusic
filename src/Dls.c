@@ -221,7 +221,7 @@ static size_t DmDls_decodeAdpcm(DmDlsWave const* slf, float* out, size_t len) {
 	}
 
 	uint32_t block_count = slf->pcm_size / slf->block_align;
-	uint32_t frames_per_block = (slf->block_align - 6 * slf->channels) * 2 /* two frames per channel from the header */;
+	uint32_t frames_per_block = (uint32_t) (slf->block_align - 6 * slf->channels) * 2 /* two frames per channel from the header */;
 	uint32_t size = frames_per_block * block_count;
 
 	if (out == NULL || len == 0) {
