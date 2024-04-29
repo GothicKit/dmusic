@@ -355,6 +355,7 @@ DmArray_DEFINE(DmMessageList, DmMessage);
 
 typedef struct DmSynthChannel {
 	tsf* synth;
+	float volume;
 	float volume_reset;
 	float pan_reset;
 	int pitch_bend_reset;
