@@ -193,7 +193,7 @@ static uint8_t const* DmDls_decodeAdpcmBlock(uint8_t const* adpcm, float* pcm, u
 		int predictor = (coeff_1 * sample_a + coeff_2 * sample_b) / 256;
 		predictor += nibble * delta;
 		predictor = clamp_16bit(predictor);
-		*pcm++ = (float) ((int16_t) predictor) / 32767.f;
+		*pcm++ = (float) ((int16_t) predictor) / INT16_MAX;
 		sample_b = sample_a;
 		sample_a = (int16_t) (predictor);
 		delta = max((ADPCM_ADAPT_TABLE[(b & 0xF0) >> 4] * delta) / 256, 16);
@@ -203,7 +203,7 @@ static uint8_t const* DmDls_decodeAdpcmBlock(uint8_t const* adpcm, float* pcm, u
 		predictor = (coeff_1 * sample_a + coeff_2 * sample_b) / 256;
 		predictor += nibble * delta;
 		predictor = clamp_16bit(predictor);
-		*pcm++ = (float) ((int16_t) predictor) / 32767.f;
+		*pcm++ = (float) ((int16_t) predictor) / INT16_MAX;
 		sample_b = sample_a;
 		sample_a = (int16_t) (predictor);
 		delta = max((ADPCM_ADAPT_TABLE[b & 0x0F] * delta) / 256, 16);

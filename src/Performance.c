@@ -4,10 +4,6 @@
 #include <math.h>
 #include <stdlib.h>
 
-static int32_t max(int32_t a, int32_t b) {
-	return a > b ? a : b;
-}
-
 enum {
 	DmInt_DEFAULT_TEMPO = 100,
 };
@@ -647,7 +643,7 @@ static void DmPerformance_handleCommandMessage(DmPerformance* slf, DmMessage_Com
 		if (msg->groove_range != 0) {
 			int rnd = rand() % msg->groove_range;
 			int range = rnd - (msg->groove_range / 2);
-			slf->groove = (uint8_t) max(msg->groove_level + range, 0);
+			slf->groove = (uint8_t) max_s32(msg->groove_level + range, 0);
 		}
 	} else if (msg->command == DmCommand_END_AND_INTRO) {
 		Dm_report(DmLogLevel_WARN, "DmPerformance: Command message with command %d not implemented", msg->command);
@@ -835,7 +831,7 @@ DmResult DmPerformance_renderPcm(DmPerformance* slf, void* buf, size_t len, DmRe
 		}
 
 		DmMessage* msg = ok_ctrl ? &msg_ctrl : &msg_midi;
-		uint32_t time_offset = (uint32_t) max((int) msg->time - (int) slf->time, 0);
+		uint32_t time_offset = (uint32_t) max_s32((int) msg->time - (int) slf->time, 0);
 		uint32_t offset_samples = DmPerformance_getSampleCountFromDuration(slf, time_offset, sample_rate, channels);
 
 		if (offset_samples > len - sample) {
@@ -899,8 +895,8 @@ DmResult DmPerformance_playTransition(DmPerformance* slf,
 			DmMessage msg;
 			msg.type = DmMessage_COMMAND;
 			msg.command.command = (DmCommandType) embellishment;
-			msg.command.groove_level = slf->groove;
-			msg.command.groove_range = slf->groove_range;
+			msg.command.groove_level = pattern->groove_bottom;
+			msg.command.groove_range = 0;
 			msg.command.measure = 0;
 			msg.command.beat = 0;
 			msg.command.repeat_mode = DmPatternSelect_RANDOM;
