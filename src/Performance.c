@@ -562,7 +562,7 @@ static void DmPerformance_playPattern(DmPerformance* slf, DmPattern* pttn) {
 			int16_t start = curve.start_value;
 			int16_t end = curve.end_value;
 
-			float prev_value;
+			float prev_value = start;
 			// TODO(lmichaelis): Check whether this is actually correct!
 			for (uint32_t k = 0; k < (duration / DmInt_CURVE_SPACING); ++k) {
 				uint32_t offset = k * DmInt_CURVE_SPACING;
