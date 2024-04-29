@@ -670,6 +670,11 @@ static void DmPerformance_handleMessage(DmPerformance* slf, DmMessage* msg) {
 		          "DmPerformance: MESSAGE time=%d msg=segment-change segment=\"%s\"",
 		          slf->time,
 		          msg->segment.segment->info.unam);
+		Dm_report(DmLogLevel_DEBUG,
+		          "DmPerformance: Playing segment \"%s\" (repeat %d/%d)",
+		          msg->segment.segment->info.unam,
+		          msg->segment.loop + 1,
+		          msg->segment.segment->repeats);
 
 		// TODO(lmichaelis): The segment in this message might no longer be valid, since we
 		// have called `pop` on the queue but not kept a strong reference to the message!
@@ -680,6 +685,7 @@ static void DmPerformance_handleMessage(DmPerformance* slf, DmMessage* msg) {
 		DmSynth_sendNoteOffEverything(&slf->synth);
 
 		// Reset the time to combat drift
+		uint32_t loop_offset = msg->segment.loop > 0 ? sgt->loop_start : 0;
 		slf->time = 0;
 
 		for (size_t i = 0; i < sgt->messages.length; ++i) {
@@ -693,7 +699,7 @@ static void DmPerformance_handleMessage(DmPerformance* slf, DmMessage* msg) {
 				continue;
 			}
 
-			DmMessageQueue_add(&slf->control_queue, m, slf->time + m->time, DmQueueConflict_REPLACE);
+			DmMessageQueue_add(&slf->control_queue, m, slf->time + m->time - loop_offset, DmQueueConflict_REPLACE);
 		}
 
 		DmSegment_release(slf->segment);
