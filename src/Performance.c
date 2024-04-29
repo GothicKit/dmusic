@@ -69,7 +69,7 @@ void DmPerformance_release(DmPerformance* slf) {
 static uint32_t DmPerformance_getStartTime(DmPerformance* slf, DmPlaybackFlags flags) {
 	if (flags & DmPlayback_BEAT) {
 		uint32_t beat_length = Dm_getBeatLength(slf->time_signature);
-		uint32_t time_to_next_beat = beat_length;
+		uint32_t time_to_next_beat = 0;
 
 		uint32_t offset = slf->time - slf->segment_start;
 
@@ -82,11 +82,11 @@ static uint32_t DmPerformance_getStartTime(DmPerformance* slf, DmPlaybackFlags f
 
 	if (flags & DmPlayback_MEASURE) {
 		uint32_t measure_length = Dm_getMeasureLength(slf->time_signature);
-		uint32_t time_to_next_measure = measure_length;
+		uint32_t time_to_next_measure = 0;
 
 		uint32_t offset = slf->time - slf->segment_start;
 
-		if (offset) {
+		if (offset != 0) {
 			time_to_next_measure = measure_length - (offset % measure_length);
 		}
 		return slf->time + time_to_next_measure;
