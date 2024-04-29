@@ -92,8 +92,8 @@ void DmSynth_sendBandUpdate(DmSynth* slf, DmBand* band) {
 	for (size_t i = 0; i < band->instrument_count; ++i) {
 		DmInstrument* ins = &band->instruments[i];
 
-		tsf* tsf = NULL;
-		DmResult rv = DmSynth_createTsfForInstrument(ins, &tsf);
+		tsf* t = NULL;
+		DmResult rv = DmSynth_createTsfForInstrument(ins, &t);
 		if (rv != DmResult_SUCCESS) {
 			slf->channels[ins->channel].synth = NULL;
 			continue;
@@ -102,12 +102,12 @@ void DmSynth_sendBandUpdate(DmSynth* slf, DmBand* band) {
 		float pan = (ins->flags & DmInstrument_PAN) ? (float) ins->pan / DmInt_MIDI_MAX : DmInt_PAN_CENTER;
 		float vol = (ins->flags & DmInstrument_VOLUME) ? (float) ins->volume / DmInt_MIDI_MAX : DmInt_VOLUME_MAX;
 
-		bool res = tsf_channel_set_pan(tsf, 0, pan);
+		bool res = tsf_channel_set_pan(t, 0, pan);
 		if (!res) {
 			Dm_report(DmLogLevel_ERROR, "DmSynth: tsf_channel_set_pan encountered an error.");
 		}
 
-		slf->channels[ins->channel].synth = tsf;
+		slf->channels[ins->channel].synth = t;
 		slf->channels[ins->channel].pitch_bend_reset = DmInt_PITCH_BEND_NEUTRAL;
 		slf->channels[ins->channel].volume = vol;
 		slf->channels[ins->channel].volume_reset = vol;
