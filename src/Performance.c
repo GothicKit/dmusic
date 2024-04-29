@@ -417,7 +417,7 @@ static float lerp(float x, float start, float end) {
 // See https://documentation.help/DirectMusic/dmusiostylenote.htm
 static uint32_t DmPerformance_convertIoTimeRange(uint8_t range) {
 	uint32_t result = 0;
-	if (0 <= range && range <= 190) {
+	if (range <= 190) {
 		result = range;
 	} else if (191 <= range && range <= 212) {
 		result = ((range - 190) * 5) + 190;
