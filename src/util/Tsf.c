@@ -175,17 +175,17 @@ DmResult DmSynth_createTsfForInstrument(DmInstrument* slf, tsf** out) {
 		return DmResult_MEMORY_EXHAUSTED;
 	}
 
-	uint32_t sample_offset = 0;
+	size_t sample_offset = 0;
 	for (uint32_t i = 0; i < dls->region_count; ++i) {
 		DmDlsWave* wav = &slf->dls_collection->wave_table[dls->regions[i].link_table_index];
 
 		strncpy(sample_headers[i].sampleName, wav->info.inam, 19);
 
-		sample_headers[i].start = sample_offset;
+		sample_headers[i].start = (uint32_t) sample_offset;
 		sample_headers[i].sampleRate = wav->samples_per_second;
 		sample_headers[i].sampleType = 1; // SFSampleLink::monoSample
 		sample_offset += DmDls_decodeSamples(wav, samples + sample_offset, sample_count - sample_offset);
-		sample_headers[i].end = sample_offset;
+		sample_headers[i].end = (uint32_t) sample_offset;
 
 		// There are 46 0-samples after each "real" sample
 		sample_offset += kSamplePadding;
