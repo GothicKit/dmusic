@@ -284,12 +284,16 @@ static void DmDls_parseWaveTableItem(DmDlsWave* slf, DmRiff* rif) {
 	while (DmRiff_readChunk(rif, &cnk)) {
 		if (DmRiff_is(&cnk, DM_FOURCC_LIST, DM_FOURCC_INFO)) {
 			DmInfo_parse(&slf->info, &cnk);
+		} else if (DmRiff_is(&cnk, DM_FOURCC_GUID, 0)) {
+			DmGuid_parse(&slf->guid, &cnk);
 		} else if (DmRiff_is(&cnk, DM_FOURCC_DATA, 0)) {
 			slf->pcm_size = cnk.len;
 			slf->pcm = cnk.mem;
 			cnk.pos = cnk.len;
 		} else if (DmRiff_is(&cnk, DM_FOURCC_WSMP, 0)) {
 			DmDls_parseWaveSample(&slf->sample, &cnk);
+		} else if (DmRiff_is(&cnk, DM_FOURCC_WAVH, 0)) {
+			continue; // TODO(lmichaelis): The purpose of the 'wavh'-chunk is unknown.
 		} else if (DmRiff_is(&cnk, DM_FOURCC_WAVU, 0)) {
 			continue; // TODO(lmichaelis): The purpose of the 'wavu'-chunk is unknown.
 		} else if (DmRiff_is(&cnk, DM_FOURCC_SMPL, 0)) {

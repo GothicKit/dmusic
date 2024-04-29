@@ -62,6 +62,7 @@
 #define DM_FOURCC_WAVE DM_FOURCC('w', 'a', 'v', 'e')
 #define DM_FOURCC_FMT_ DM_FOURCC('f', 'm', 't', ' ')
 #define DM_FOURCC_DATA DM_FOURCC('d', 'a', 't', 'a')
+#define DM_FOURCC_WAVH DM_FOURCC('w', 'a', 'v', 'h')
 #define DM_FOURCC_WAVU DM_FOURCC('w', 'a', 'v', 'u')
 #define DM_FOURCC_SMPL DM_FOURCC('s', 'm', 'p', 'l')
 #define DM_FOURCC_STYH DM_FOURCC('s', 't', 'y', 'h')

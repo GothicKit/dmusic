@@ -148,6 +148,7 @@ typedef enum DmDlsWaveFormat {
 
 typedef struct DmDlsWave {
 	DmInfo info;
+	DmGuid guid;
 
 	DmDlsWaveFormat format;
 	uint16_t channels;
