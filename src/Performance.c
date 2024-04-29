@@ -9,7 +9,6 @@ static int32_t max(int32_t a, int32_t b) {
 }
 
 enum {
-	DmInt_PULSES_PER_QUARTER_NOTE = 768,
 	DmInt_DEFAULT_TEMPO = 100,
 };
 
@@ -26,6 +25,9 @@ DmResult DmPerformance_create(DmPerformance** slf) {
 	new->reference_count = 1;
 	new->tempo = DmInt_DEFAULT_TEMPO;
 	new->groove = 1;
+	new->time_signature.beats_per_measure = 4;
+	new->time_signature.beat = 4;
+	new->time_signature.grids_per_beat = 2;
 
 	DmResult rv = DmMessageQueue_init(&new->control_queue);
 	if (rv != DmResult_SUCCESS) {
@@ -67,46 +69,10 @@ void DmPerformance_release(DmPerformance* slf) {
 	Dm_free(slf);
 }
 
-static uint32_t DmPerformance_getBeatLength(DmTimeSignature sig) {
-	// Special case: If the beat 0, it indicates a 256th note instead
-	if (sig.beat == 0) {
-		return (DmInt_PULSES_PER_QUARTER_NOTE * 4) / 256;
-	}
-
-	return (DmInt_PULSES_PER_QUARTER_NOTE * 4) / sig.beat;
-}
-
-static uint32_t DmPerformance_getMeasureLength(DmTimeSignature sig) {
-	uint32_t v = sig.beats_per_measure * DmPerformance_getBeatLength(sig);
-
-	if (v < 1) {
-		return 1;
-	}
-
-	return v;
-}
-
-static double DmPerformance_getPulsesPerSample(DmTimeSignature time_signature, double beats_per_minute, uint32_t sample_rate) {
-	uint32_t pulses_per_beat = DmPerformance_getBeatLength(time_signature); // unit: music-time per beat
-	double beats_per_second = beats_per_minute / 60; // unit: 1 per second
-	double pulses_per_second = pulses_per_beat * beats_per_second; // unit: music-time per second
-	double pulses_per_sample = pulses_per_second / sample_rate; // unit: music-time per sample
-	return pulses_per_sample;
-}
-
-static uint32_t DmPerformance_getTimeOffset(uint32_t grid_start, int32_t time_offset, DmTimeSignature sig) {
-	uint32_t beat_length = DmPerformance_getBeatLength(sig);
-
-	uint32_t full_beat_length = (grid_start / sig.grids_per_beat) * beat_length;
-	uint32_t partial_beat_length = (grid_start % sig.grids_per_beat) * (beat_length / sig.grids_per_beat);
-
-	return (uint32_t) time_offset + full_beat_length + partial_beat_length;
-}
-
 // See https://documentation.help/DirectMusic/dmussegfflags.htm
 static uint32_t DmPerformance_getStartTime(DmPerformance* slf, DmPlaybackFlags flags) {
 	if (flags & DmPlayback_BEAT) {
-		uint32_t beat_length = DmPerformance_getBeatLength(slf->time_signature);
+		uint32_t beat_length = Dm_getBeatLength(slf->time_signature);
 		uint32_t time_to_next_beat = beat_length;
 
 		uint32_t offset = slf->time - slf->segment_start;
@@ -119,7 +85,7 @@ static uint32_t DmPerformance_getStartTime(DmPerformance* slf, DmPlaybackFlags f
 	}
 
 	if (flags & DmPlayback_MEASURE) {
-		uint32_t measure_length = DmPerformance_getMeasureLength(slf->time_signature);
+		uint32_t measure_length = Dm_getMeasureLength(slf->time_signature);
 		uint32_t time_to_next_measure = measure_length;
 
 		uint32_t offset = slf->time - slf->segment_start;
@@ -537,7 +503,7 @@ static void DmPerformance_playPattern(DmPerformance* slf, DmPattern* pttn) {
 				continue;
 			}
 
-			uint32_t time = DmPerformance_getTimeOffset(note.grid_start, note.time_offset, part->time_signature);
+			uint32_t time = Dm_getTimeOffset(note.grid_start, note.time_offset, part->time_signature);
 
 			if (note.time_range != 0) {
 				uint32_t range = DmPerformance_convertIoTimeRange(note.time_range);
@@ -589,8 +555,7 @@ static void DmPerformance_playPattern(DmPerformance* slf, DmPattern* pttn) {
 				continue;
 			}
 
-			uint32_t start_time =
-			    DmPerformance_getTimeOffset(curve.grid_start, curve.time_offset, part->time_signature);
+			uint32_t start_time = Dm_getTimeOffset(curve.grid_start, curve.time_offset, part->time_signature);
 			uint32_t duration = curve.duration / 2;
 
 			int16_t start = curve.start_value;
@@ -667,8 +632,8 @@ static void DmPerformance_playPattern(DmPerformance* slf, DmPattern* pttn) {
 	msg.command.beat = 0;
 	msg.command.measure = 0;
 
-	uint32_t pattern_length = DmPerformance_getMeasureLength(slf->time_signature) * pttn->length_measures;
-	DmMessageQueue_add(&slf->control_queue, &msg, slf->time + pattern_length, DmQueueConflict_KEEP);
+	uint32_t pattern_length = Dm_getMeasureLength(slf->time_signature) * pttn->length_measures;
+	DmMessageQueue_add(&slf->music_queue, &msg, slf->time + pattern_length, DmQueueConflict_KEEP);
 
 	slf->variation += 1;
 }
@@ -831,18 +796,14 @@ static void DmPerformance_handleMessage(DmPerformance* slf, DmMessage* msg) {
 	}
 }
 
-static uint32_t DmPerformance_getSampleCountFromDuration(DmPerformance* slf,
-                                                         uint32_t duration,
-                                                         uint32_t sample_rate,
-                                                         uint8_t channels) {
-	double pulses_per_sample = DmPerformance_getPulsesPerSample(slf->time_signature, slf->tempo, sample_rate);
-	return (uint32_t) (duration / pulses_per_sample / channels);
+static uint32_t DmPerformance_getSampleCountFromDuration(DmPerformance* slf, uint32_t duration, uint32_t sample_rate, uint8_t channels) {
+	double pulses_per_sample = Dm_getTicksPerSample(slf->time_signature, slf->tempo, sample_rate) / channels;
+	return (uint32_t) (duration / pulses_per_sample);
 }
 
-static uint32_t
-DmPerformance_getDurationFromSampleCount(DmPerformance* slf, uint32_t samples, uint32_t sample_rate, uint8_t channels) {
-	double pulses_per_sample = DmPerformance_getPulsesPerSample(slf->time_signature, slf->tempo, sample_rate);
-	return (uint32_t) ((pulses_per_sample / channels) * samples);
+static uint32_t DmPerformance_getDurationFromSampleCount(DmPerformance* slf, uint32_t samples, uint32_t sample_rate, uint8_t channels) {
+	double pulses_per_sample = Dm_getTicksPerSample(slf->time_signature, slf->tempo, sample_rate) / channels;
+	return (uint32_t) round(pulses_per_sample * samples);
 }
 
 DmResult DmPerformance_renderPcm(DmPerformance* slf, void* buf, size_t len, DmRenderOptions opts) {
@@ -946,7 +907,7 @@ DmResult DmPerformance_playTransition(DmPerformance* slf,
 
 			DmMessageQueue_add(&slf->control_queue, &msg, start, DmQueueConflict_REPLACE);
 
-			start += DmPerformance_getMeasureLength(pattern->time_signature) * pattern->length_measures;
+			start += Dm_getMeasureLength(pattern->time_signature) * pattern->length_measures;
 		}
 	}
 

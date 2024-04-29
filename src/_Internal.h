@@ -449,6 +449,11 @@ DMINT size_t max_usize(size_t a, size_t b);
 DMINT bool DmGuid_equals(DmGuid const* a, DmGuid const* b);
 DMINT void DmTimeSignature_parse(DmTimeSignature* slf, DmRiff* rif);
 
+DMINT uint32_t Dm_getBeatLength(DmTimeSignature sig);
+DMINT uint32_t Dm_getMeasureLength(DmTimeSignature sig);
+DMINT double Dm_getTicksPerSample(DmTimeSignature time_signature, double beats_per_minute, uint32_t sample_rate);
+DMINT uint32_t Dm_getTimeOffset(uint32_t grid_start, int32_t time_offset, DmTimeSignature sig);
+
 DMINT DmResult DmLoader_getStyle(DmLoader* slf, DmReference const* ref, DmStyle** sty);
 DMINT DmResult DmLoader_getDownloadableSound(DmLoader* slf, DmReference const* ref, DmDls** snd);
 
