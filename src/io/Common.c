@@ -3,6 +3,7 @@
 #include "_Internal.h"
 
 #include <uchar.h>
+#include <wchar.h>
 
 void DmGuid_parse(DmGuid* slf, DmRiff* rif) {
 	DmRiff_read(rif, slf->data, sizeof slf->data);
@@ -20,7 +21,11 @@ static char* Dm_utf16ToUtf8Inline(char* out, char16_t const* u16) {
 	size_t i = 0;
 	size_t j = 0;
 	for (; i < len; ++i) {
+#ifndef _WIN32
 		j += c16rtomb(out + j, u16[i], &state);
+#else
+		j += wcrtomb(out + j, (wchar_t) u16[i], &state);
+#endif
 	}
 
 	out[j] = '\0';
