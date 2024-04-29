@@ -94,6 +94,15 @@ static double DmPerformance_getPulsesPerSample(DmTimeSignature time_signature, d
 	return pulses_per_sample;
 }
 
+static uint32_t DmPerformance_getTimeOffset(uint32_t grid_start, int32_t time_offset, DmTimeSignature sig) {
+	uint32_t beat_length = DmPerformance_getBeatLength(sig);
+
+	uint32_t full_beat_length = (grid_start / sig.grids_per_beat) * beat_length;
+	uint32_t partial_beat_length = (grid_start % sig.grids_per_beat) * (beat_length / sig.grids_per_beat);
+
+	return (uint32_t) time_offset + full_beat_length + partial_beat_length;
+}
+
 // See https://documentation.help/DirectMusic/dmussegfflags.htm
 static uint32_t DmPerformance_getStartTime(DmPerformance* slf, DmPlaybackFlags flags) {
 	if (flags & DmPlayback_BEAT) {
@@ -229,14 +238,6 @@ static DmPattern* DmPerformance_choosePattern(DmPerformance* slf, DmCommandType 
 	}
 
 	return NULL;
-}
-
-static uint32_t DmPerformance_getTimeOffset(uint32_t grid_start, int32_t time_offset, DmTimeSignature sig) {
-	const uint32_t DMUS_PPQ = DmInt_PULSES_PER_QUARTER_NOTE;
-	const uint32_t PPN = (DMUS_PPQ * 4) / sig.beat;
-
-	return (uint32_t) time_offset +
-	    ((grid_start / sig.grids_per_beat) * PPN + (grid_start % sig.grids_per_beat) * (PPN / sig.grids_per_beat));
 }
 
 static uint32_t DmInt_DEFAULT_SCALE_PATTERN = 0xab5ab5;
@@ -474,8 +475,6 @@ static void DmPerformance_playPattern(DmPerformance* slf, DmPattern* pttn) {
 		variation_lock[i] = -1;
 	}
 
-	slf->time_signature = pttn->time_signature;
-
 	for (size_t i = 0; i < pttn->parts.length; ++i) {
 		DmPartReference* pref = &pttn->parts.data[i];
 		DmPart* part = DmStyle_findPart(slf->style, pref);
@@ -668,7 +667,7 @@ static void DmPerformance_playPattern(DmPerformance* slf, DmPattern* pttn) {
 	msg.command.beat = 0;
 	msg.command.measure = 0;
 
-	uint32_t pattern_length = DmPerformance_getMeasureLength(pttn->time_signature) * pttn->length_measures;
+	uint32_t pattern_length = DmPerformance_getMeasureLength(slf->time_signature) * pttn->length_measures;
 	DmMessageQueue_add(&slf->control_queue, &msg, slf->time + pattern_length, DmQueueConflict_KEEP);
 
 	slf->variation += 1;
@@ -749,6 +748,7 @@ static void DmPerformance_handleMessage(DmPerformance* slf, DmMessage* msg) {
 	case DmMessage_STYLE:
 		// TODO(lmichaelis): The style in this message might have already been de-allocated!
 		slf->style = DmStyle_retain(msg->style.style);
+		slf->time_signature = slf->style->time_signature;
 		Dm_report(DmLogLevel_DEBUG,
 		          "DmPerformance: MESSAGE time=%d msg=style-change style=\"%s\"",
 		          slf->time,
