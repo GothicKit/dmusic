@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: MIT-Modern-Variant
 #include "_Internal.h"
 
+#include <uchar.h>
+
 void DmGuid_parse(DmGuid* slf, DmRiff* rif) {
 	DmRiff_read(rif, slf->data, sizeof slf->data);
 }
