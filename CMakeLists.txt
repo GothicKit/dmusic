@@ -47,6 +47,10 @@ target_compile_options(dmusic PRIVATE ${_DM_COMPILE_FLAGS})
 target_link_options(dmusic PRIVATE ${_DM_LINK_FLAGS})
 target_link_libraries(dmusic PRIVATE tsf)
 
+if (MINGW)
+    target_compile_definitions(dmusic PRIVATE _POSIX_C_SOURCE=1)
+endif ()
+
 set_target_properties(dmusic PROPERTIES
         CXX_VISIBILITY_PRESET hidden
         VISIBILITY_INLINES_HIDDEN 1
