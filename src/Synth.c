@@ -241,10 +241,17 @@ size_t DmSynth_render(DmSynth* slf, void* buf, size_t len, DmRenderOptions fmt) 
 			tsf_set_output(slf->channels[i].synth, TSF_MONO, 44100, 0);
 		}
 
+		float vol = slf->channels[i].volume;
+		if (vol < 0) {
+			vol = 0;
+		} else if (vol > 1) {
+			vol = 1;
+		}
+
 		if (fmt & DmRender_FLOAT) {
-			tsf_render_float(slf->channels[i].synth, buf, (int) len / channels, true, slf->channels[i].volume);
+			tsf_render_float(slf->channels[i].synth, buf, (int) len / channels, true, vol);
 		} else {
-			tsf_render_short(slf->channels[i].synth, buf, (int) len / channels, true, slf->channels[i].volume);
+			tsf_render_short(slf->channels[i].synth, buf, (int) len / channels, true, vol);
 		}
 	}
 

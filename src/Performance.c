@@ -585,6 +585,14 @@ static void DmPerformance_playPattern(DmPerformance* slf, DmPattern* pttn) {
 			int16_t start = curve.start_value;
 			int16_t end = curve.end_value;
 
+			// Some MIDI control curves have invalid ranges (e.g. -22000 to 127)
+			bool start_in_range = start >= 0 && start <= 127;
+			bool end_in_range = end >= 0 && end <= 127;
+			if (curve.event_type == DmCurveType_CONTROL_CHANGE && !(start_in_range && end_in_range)) {
+				Dm_report(DmLogLevel_DEBUG, "DmPerformance: Curve is out-of-range");
+				continue;
+			}
+
 			float prev_value = start;
 			// TODO(lmichaelis): Check whether this is actually correct!
 			for (uint32_t k = 0; k < (duration / DmInt_CURVE_SPACING); ++k) {
