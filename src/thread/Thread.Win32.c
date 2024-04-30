@@ -1,19 +1,12 @@
 // Copyright © 2024. GothicKit Contributors
 // SPDX-License-Identifier: MIT-Modern-Variant
-
-/*
-Win32 implementation for c11threads.
-
-Authors:
-    John Tsiombikas <nuclear@member.fsf.org>
-        Oliver Old <oliver.old@outlook.com>
-
-            I place this piece of code in the public domain. Feel free to use as you see
-                fit. I'd appreciate it if you keep my name at the top of the code somewhere, but
-    whatever.
-
-    Main project site: https://github.com/jtsiomb/c11threads
-                                */
+//
+// Adapted from c11threads originally authored by
+//    John Tsiombikas <nuclear@member.fsf.org> and
+//    Oliver Old <oliver.old@outlook.com>
+// and placed into the public domain.
+//
+// https://github.com/jtsiomb/c11threads
 
 #if defined(_WIN32) && !defined(C11THREADS_PTHREAD_WIN32)
 
@@ -24,7 +17,7 @@ Authors:
 		#include <crtdbg.h>
 	#endif
 
-	#include "c11threads.h"
+	#include "Thread.h"
 
 	#include <assert.h>
 	#include <stddef.h>
