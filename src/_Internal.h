@@ -370,6 +370,7 @@ typedef struct DmSynth {
 	size_t channel_count;
 	DmSynthChannel* channels;
 	DmBand* band;
+	float volume;
 } DmSynth;
 
 struct DmSegment {
@@ -454,6 +455,7 @@ DMINT void Dm_report(DmLogLevel lvl, char const* fmt, ...);
 
 DMINT size_t max_usize(size_t a, size_t b);
 DMINT int32_t max_s32(int32_t a, int32_t b);
+DMINT float clamp_f32(float val, float min, float max);
 DMINT bool DmGuid_equals(DmGuid const* a, DmGuid const* b);
 DMINT void DmTimeSignature_parse(DmTimeSignature* slf, DmRiff* rif);
 
@@ -505,6 +507,7 @@ DMINT void DmSynth_init(DmSynth* slf);
 DMINT void DmSynth_free(DmSynth* slf);
 DMINT void DmSynth_reset(DmSynth* slf);
 
+DMINT void DmSynth_setVolume(DmSynth* slf, float vol);
 DMINT DmResult DmSynth_createTsfForInstrument(DmInstrument* slf, tsf** out);
 DMINT void DmSynth_sendBandUpdate(DmSynth* slf, DmBand* band);
 DMINT void DmSynth_sendControl(DmSynth* slf, uint32_t channel, uint8_t control, float value);

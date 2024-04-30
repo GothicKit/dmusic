@@ -25,6 +25,8 @@ DmResult DmPerformance_create(DmPerformance** slf) {
 	new->time_signature.beat = 4;
 	new->time_signature.grids_per_beat = 2;
 
+	DmSynth_init(&new->synth);
+
 	if (mtx_init(&new->mod_lock, mtx_plain) != thrd_success) {
 		Dm_free(new);
 		return DmResult_INTERNAL_ERROR;
@@ -984,4 +986,12 @@ DmResult DmPerformance_playTransition(DmPerformance* slf,
 
 	(void) mtx_unlock(&slf->mod_lock);
 	return DmResult_SUCCESS;
+}
+
+void DmPerformance_setVolume(DmPerformance* slf, float vol) {
+	if (slf == NULL) {
+		return;
+	}
+
+	DmSynth_setVolume(&slf->synth, vol);
 }

@@ -20,6 +20,7 @@ void DmSynth_init(DmSynth* slf) {
 	}
 
 	memset(slf, 0, sizeof *slf);
+	slf->volume = 1;
 }
 
 static void DmSynth_freeChannels(DmSynth* slf) {
@@ -228,6 +229,14 @@ void DmSynth_sendNoteOffEverything(DmSynth* slf) {
 	}
 }
 
+void DmSynth_setVolume(DmSynth* slf, float vol) {
+	if (slf == NULL) {
+		return;
+	}
+
+	slf->volume = clamp_f32(vol, 0, 1);
+}
+
 size_t DmSynth_render(DmSynth* slf, void* buf, size_t len, DmRenderOptions fmt) {
 	for (size_t i = 0; i < slf->channel_count; ++i) {
 		if (slf->channels[i].synth == NULL) {
@@ -241,12 +250,13 @@ size_t DmSynth_render(DmSynth* slf, void* buf, size_t len, DmRenderOptions fmt) 
 			tsf_set_output(slf->channels[i].synth, TSF_MONO, 44100, 0);
 		}
 
-		float vol = slf->channels[i].volume;
+		float vol = slf->channels[i].volume ;
 		if (vol < 0) {
 			vol = 0;
 		} else if (vol > 1) {
 			vol = 1;
 		}
+		vol *= slf->volume;
 
 		if (fmt & DmRender_FLOAT) {
 			tsf_render_float(slf->channels[i].synth, buf, (int) len / channels, true, vol);

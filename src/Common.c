@@ -15,6 +15,17 @@ int32_t max_s32(int32_t a, int32_t b) {
 	return a > b ? a : b;
 }
 
+float clamp_f32(float val, float min, float max) {
+	if (val < min) {
+		return min;
+	}
+
+	if (val > max) {
+		return max;
+	}
+
+	return val;
+}
 
 bool DmGuid_equals(DmGuid const* a, DmGuid const* b) {
 	return memcmp(a->data, b->data, sizeof a->data) == 0;

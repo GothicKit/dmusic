@@ -299,3 +299,4 @@ DMAPI void DmPerformance_release(DmPerformance* slf);
 DMAPI DmResult DmPerformance_playSegment(DmPerformance* slf, DmSegment* sgt, DmPlaybackFlags flags);
 DMAPI DmResult DmPerformance_playTransition(DmPerformance* slf, DmSegment* sgt, DmEmbellishmentType embellishment, DmPlaybackFlags flags);
 DMAPI DmResult DmPerformance_renderPcm(DmPerformance* slf, void* buf, size_t len, DmRenderOptions opts);
+DMAPI void DmPerformance_setVolume(DmPerformance* slf, float vol);
