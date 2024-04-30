@@ -139,6 +139,11 @@ DmResult DmLoader_getDownloadableSound(DmLoader* slf, DmReference const* ref, Dm
 		return DmResult_INVALID_ARGUMENT;
 	}
 
+	// If no file reference is provided, we're unable to load this.
+	if (ref->file == NULL) {
+		return DmResult_NOT_FOUND;
+	}
+
 	// See if we have the requested item in the cache.
 	if (mtx_lock(&slf->cache_lock) != thrd_success) {
 		return DmResult_INTERNAL_ERROR;
@@ -193,6 +198,11 @@ DmResult DmLoader_getDownloadableSound(DmLoader* slf, DmReference const* ref, Dm
 DmResult DmLoader_getStyle(DmLoader* slf, DmReference const* ref, DmStyle** sty) {
 	if (slf == NULL || ref == NULL || sty == NULL) {
 		return DmResult_INVALID_ARGUMENT;
+	}
+
+	// If no file reference is provided, we're unable to load this.
+	if (ref->file == NULL) {
+		return DmResult_NOT_FOUND;
 	}
 
 	// See if we have the requested item in the cache.
