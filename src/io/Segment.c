@@ -118,7 +118,7 @@ static void DmSegment_parseChordItem(DmMessage_Chord* slf, DmRiff* rif) {
 
 	uint32_t max_subchord_count = (sizeof slf->subchords) / (sizeof *slf->subchords);
 	if (slf->subchord_count > max_subchord_count) {
-		Dm_report(DmLogLevel_ERROR,
+		Dm_report(DmLogLevel_WARN,
 		          "DmMessage: Chord message reports too many sub-chords: got %d, expected at maximum %d",
 		          slf->subchord_count,
 		          max_subchord_count);

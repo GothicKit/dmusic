@@ -84,6 +84,12 @@ typedef enum DmDlsArticulatorTransform {
 	DmDlsArticulatorTransform_SWITCH = 3,
 } DmDlsArticulatorTransform;
 
+enum {
+	// If this flag is set in the DLS instrument bank (`DmDlsInstrument.bank`), this instrument
+	// is considered to be a "drum kit".
+	DmDls_DRUM_KIT = 1 << 31,
+};
+
 typedef struct DmDlsWaveSample {
 	uint16_t unity_note;
 	uint16_t fine_tune;

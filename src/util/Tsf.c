@@ -49,9 +49,8 @@ static size_t DmSynth_convertGeneratorArticulators(struct tsf_hydra_igen* gens, 
 		}
 
 		if (art->level != 1) {
-			Dm_report(DmLogLevel_ERROR, "DmSynth: DLS Level 2 articulators are not implemented, expect weird results");
+			Dm_report(DmLogLevel_WARN, "DmSynth: DLS Level 2 articulators are not implemented, expect weird results");
 		}
-
 
 		switch (con->destination) {
 		case DmDlsArticulatorDestination_PAN:

@@ -505,6 +505,7 @@ DMINT void DmSynth_init(DmSynth* slf);
 DMINT void DmSynth_free(DmSynth* slf);
 DMINT void DmSynth_reset(DmSynth* slf);
 
+DMINT DmResult DmSynth_createTsfForInstrument(DmInstrument* slf, tsf** out);
 DMINT void DmSynth_sendBandUpdate(DmSynth* slf, DmBand* band);
 DMINT void DmSynth_sendControl(DmSynth* slf, uint32_t channel, uint8_t control, float value);
 DMINT void DmSynth_sendControlReset(DmSynth* slf, uint32_t channel, uint8_t control, float reset);

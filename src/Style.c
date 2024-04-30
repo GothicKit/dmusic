@@ -79,7 +79,6 @@ DmPart* DmStyle_findPart(DmStyle* slf, DmPartReference* pref) {
 
 void DmPart_init(DmPart* slf) {
 	if (slf == NULL) {
-		Dm_report(DmLogLevel_ERROR, "DmPart: Internal error: DmPart_init called with a `NULL` pointer");
 		return;
 	}
 
@@ -88,7 +87,6 @@ void DmPart_init(DmPart* slf) {
 
 void DmPart_free(DmPart* slf) {
 	if (slf == NULL) {
-		Dm_report(DmLogLevel_ERROR, "DmPart: Internal error: DmPart_free called with a `NULL` pointer");
 		return;
 	}
 
@@ -113,8 +111,6 @@ uint32_t DmPart_getValidVariationCount(DmPart* slf) {
 
 void DmPartReference_init(DmPartReference* slf) {
 	if (slf == NULL) {
-		Dm_report(DmLogLevel_ERROR,
-		          "DmPartReference: Internal error: DmPartReference_init called with a `NULL` pointer");
 		return;
 	}
 
@@ -127,7 +123,6 @@ void DmPartReference_free(DmPartReference* slf) {
 
 void DmPattern_init(DmPattern* slf) {
 	if (slf == NULL) {
-		Dm_report(DmLogLevel_ERROR, "DmPattern: Internal error: DmPattern_init called with a `NULL` pointer");
 		return;
 	}
 
@@ -137,7 +132,6 @@ void DmPattern_init(DmPattern* slf) {
 
 void DmPattern_free(DmPattern* slf) {
 	if (slf == NULL) {
-		Dm_report(DmLogLevel_ERROR, "DmPattern: Internal error: DmPattern_free called with a `NULL` pointer");
 		return;
 	}
 

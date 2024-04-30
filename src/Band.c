@@ -52,7 +52,7 @@ static DmDlsInstrument* DmBand_findDlsInstrument(DmInstrument* slf, DmDls* dls) 
 		ins = &dls->instruments[i];
 
 		// TODO(lmichaelis): We need to ignore drum kits for now since I don't know how to handle them properly
-		if (ins->bank & (1U << 31U)) {
+		if (ins->bank & DmDls_DRUM_KIT) {
 			Dm_report(DmLogLevel_DEBUG, "DmBand: Ignoring DLS drum-kit instrument '%s'", ins->info.inam);
 			continue;
 		}
@@ -63,7 +63,7 @@ static DmDlsInstrument* DmBand_findDlsInstrument(DmInstrument* slf, DmDls* dls) 
 		}
 	}
 
-	Dm_report(DmLogLevel_ERROR,
+	Dm_report(DmLogLevel_WARN,
 	          "DmBand: Instrument patch %d:%d not found in band '%s'",
 	          bank,
 	          patch,

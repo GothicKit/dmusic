@@ -148,10 +148,6 @@ static int clamp_16bit(int v) {
 	return v;
 }
 
-static int max(int a, int b) {
-	return a >= b ? a : b;
-}
-
 // TODO(lmichaelis): These are the 'built in' set of 7 predictor value pairs; additional values can be added
 //  				 to this table by including them as metadata chunks in the WAVE header
 static int ADPCM_ADAPT_COEFF1[7] = {256, 512, 0, 192, 240, 460, 392};
@@ -196,7 +192,7 @@ static uint8_t const* DmDls_decodeAdpcmBlock(uint8_t const* adpcm, float* pcm, u
 		*pcm++ = (float) ((int16_t) predictor) / INT16_MAX;
 		sample_b = sample_a;
 		sample_a = (int16_t) (predictor);
-		delta = max((ADPCM_ADAPT_TABLE[(b & 0xF0) >> 4] * delta) / 256, 16);
+		delta = max_s32((ADPCM_ADAPT_TABLE[(b & 0xF0) >> 4] * delta) / 256, 16);
 
 		// Low Nibble
 		nibble = signed_4bit((b & 0x0F) >> 0);
@@ -206,7 +202,7 @@ static uint8_t const* DmDls_decodeAdpcmBlock(uint8_t const* adpcm, float* pcm, u
 		*pcm++ = (float) ((int16_t) predictor) / INT16_MAX;
 		sample_b = sample_a;
 		sample_a = (int16_t) (predictor);
-		delta = max((ADPCM_ADAPT_TABLE[b & 0x0F] * delta) / 256, 16);
+		delta = max_s32((ADPCM_ADAPT_TABLE[b & 0x0F] * delta) / 256, 16);
 	}
 
 	return adpcm;

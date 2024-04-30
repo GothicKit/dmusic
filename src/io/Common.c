@@ -24,6 +24,8 @@ static char* Dm_utf16ToUtf8Inline(char* out, char16_t const* u16) {
 #ifndef _WIN32
 		j += c16rtomb(out + j, u16[i], &state);
 #else
+		// NOTE: MinGW on Windows does not correctly implement `c16romb`, thus we just use `wcrtomb`.
+		// According to MinGW, `char16_t` should be equivalent to `wchar_t` on Windows.
 		j += wcrtomb(out + j, (wchar_t) u16[i], &state);
 #endif
 	}

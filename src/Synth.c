@@ -14,8 +14,6 @@ enum {
 #define DmInt_PAN_CENTER 0.5F
 #define DmInt_VOLUME_MAX 1.0F
 
-extern DmResult DmSynth_createTsfForInstrument(DmInstrument* slf, tsf** out);
-
 void DmSynth_init(DmSynth* slf) {
 	if (slf == NULL) {
 		return;
