@@ -39,6 +39,8 @@ DmCommandType Dm_embellishmentToCommand(DmEmbellishmentType embellishment) {
 		return DmCommand_BREAK;
 	case DmEmbellishment_END:
 		return DmCommand_END;
+	case DmEmbellishment_END_AND_INTRO:
+		return DmCommand_END_AND_INTRO;
 	}
 	return DmCommand_GROOVE;
 }
