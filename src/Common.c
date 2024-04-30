@@ -40,6 +40,7 @@ DmCommandType Dm_embellishmentToCommand(DmEmbellishmentType embellishment) {
 	case DmEmbellishment_END:
 		return DmCommand_END;
 	}
+	return DmCommand_GROOVE;
 }
 
 bool DmGuid_equals(DmGuid const* a, DmGuid const* b) {
