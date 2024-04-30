@@ -79,48 +79,37 @@ void DmPerformance_release(DmPerformance* slf) {
 }
 
 // See https://documentation.help/DirectMusic/dmussegfflags.htm
-static uint32_t DmPerformance_getStartTime(DmPerformance* slf, DmPlaybackFlags flags) {
-	if (flags & DmPlayback_BEAT) {
-		uint32_t beat_length = Dm_getBeatLength(slf->time_signature);
-		uint32_t time_to_next_beat = 0;
+static uint32_t DmPerformance_getStartTime(DmPerformance* slf, DmTiming timing) {
+	uint32_t timing_unit_length = 0;
 
-		uint32_t offset = slf->time - slf->segment_start;
-
-		if (offset != 0) {
-			time_to_next_beat = beat_length - (offset % beat_length);
-		}
-
-		return slf->time + time_to_next_beat;
+	switch (timing) {
+	case DmTiming_INSTANT:
+		timing_unit_length = 0;
+		break;
+	case DmTiming_GRID:
+		timing_unit_length = Dm_getBeatLength(slf->time_signature) / slf->time_signature.grids_per_beat;
+		break;
+	case DmTiming_BEAT:
+		timing_unit_length = Dm_getBeatLength(slf->time_signature);
+		break;
+	case DmTiming_MEASURE:
+		timing_unit_length = Dm_getMeasureLength(slf->time_signature);
+		break;
 	}
 
-	if (flags & DmPlayback_MEASURE) {
-		uint32_t measure_length = Dm_getMeasureLength(slf->time_signature);
-		uint32_t time_to_next_measure = 0;
+	uint32_t delay = 0;
+	uint32_t offset = slf->time - slf->segment_start;
 
-		uint32_t offset = slf->time - slf->segment_start;
-
-		if (offset != 0) {
-			time_to_next_measure = measure_length - (offset % measure_length);
-		}
-		return slf->time + time_to_next_measure;
+	if (offset != 0) {
+		delay = timing_unit_length - (offset % timing_unit_length);
 	}
 
-	Dm_report(DmLogLevel_ERROR, "DmPerformance: Playback flags %d not supported", flags);
-	return slf->time;
+	return slf->time + delay;
 }
 
-DmResult DmPerformance_playSegment(DmPerformance* slf, DmSegment* sgt, DmPlaybackFlags flags) {
+DmResult DmPerformance_playSegment(DmPerformance* slf, DmSegment* sgt, DmTiming timing) {
 	if (slf == NULL) {
 		return DmResult_INVALID_ARGUMENT;
-	}
-
-	if (flags & DmPlayback_SECONDARY) {
-		Dm_report(DmLogLevel_ERROR, "DmPerformance: Secondary segments are not yet supported");
-		return DmResult_INVALID_ARGUMENT;
-	}
-
-	if (flags & DmPlayback_DEFAULT && sgt != NULL) {
-		flags = (DmPlaybackFlags) sgt->resolution;
 	}
 
 	if (sgt != NULL && !sgt->downloaded) {
@@ -128,7 +117,7 @@ DmResult DmPerformance_playSegment(DmPerformance* slf, DmSegment* sgt, DmPlaybac
 		return DmResult_INVALID_ARGUMENT;
 	}
 
-	uint32_t offset = DmPerformance_getStartTime(slf, flags);
+	uint32_t offset = DmPerformance_getStartTime(slf, timing);
 
 	DmMessage msg;
 	msg.time = 0;
@@ -730,15 +719,14 @@ static void DmPerformance_handleMessage(DmPerformance* slf, DmMessage* msg) {
 		}
 
 		Dm_report(DmLogLevel_DEBUG,
-				  "DmPerformance: MESSAGE time=%d msg=segment-change segment=\"%s\"",
-				  slf->time,
-				  msg->segment.segment->info.unam);
+		          "DmPerformance: MESSAGE time=%d msg=segment-change segment=\"%s\"",
+		          slf->time,
+		          msg->segment.segment->info.unam);
 		Dm_report(DmLogLevel_DEBUG,
-				  "DmPerformance: Playing segment \"%s\" (repeat %d/%d)",
-				  msg->segment.segment->info.unam,
-				  msg->segment.loop + 1,
-				  msg->segment.segment->repeats);
-
+		          "DmPerformance: Playing segment \"%s\" (repeat %d/%d)",
+		          msg->segment.segment->info.unam,
+		          msg->segment.loop + 1,
+		          msg->segment.segment->repeats);
 
 		// Reset the time to combat drift
 		uint32_t loop_offset = msg->segment.loop > 0 ? sgt->loop_start : 0;
@@ -963,8 +951,7 @@ DmResult DmPerformance_renderPcm(DmPerformance* slf, void* buf, size_t len, DmRe
 
 DmResult DmPerformance_playTransition(DmPerformance* slf,
                                       DmSegment* sgt,
-                                      DmEmbellishmentType embellishment,
-                                      DmPlaybackFlags flags) {
+                                      DmEmbellishmentType embellishment, DmTiming timing) {
 	if (slf == NULL || sgt == NULL) {
 		return DmResult_INVALID_ARGUMENT;
 	}
@@ -972,7 +959,7 @@ DmResult DmPerformance_playTransition(DmPerformance* slf,
 	// If no segment is currently playing, simply start playing the
 	// new segment without a transition.
 	if (slf->segment == NULL) {
-		return DmPerformance_playSegment(slf, sgt, flags);
+		return DmPerformance_playSegment(slf, sgt, timing);
 	}
 
 	if (!sgt->downloaded) {
@@ -986,7 +973,7 @@ DmResult DmPerformance_playTransition(DmPerformance* slf,
 	DmMessageQueue_clear(&slf->control_queue);
 
 	// TODO: This is wrong!
-	uint32_t start = DmPerformance_getStartTime(slf, flags);
+	uint32_t start = DmPerformance_getStartTime(slf, timing);
 	if (embellishment != DmEmbellishment_NONE) {
 		// TODO: This won't work if there are multiple possible pattern
 		DmPattern* pattern = DmPerformance_choosePattern(slf, (DmCommandType) embellishment);

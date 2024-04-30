@@ -15,14 +15,14 @@
 #include <uchar.h>
 
 typedef enum DmResolveFlags {
-	DmResolve_AFTER_PREPARE_TIME = DmPlayback_AFTER_PREPARE_TIME,
-	DmResolve_AFTER_QUEUE_TIME = DmPlayback_AFTER_QUEUE_TIME,
-	DmResolve_AFTER_LATENCY_TIME = DmPlayback_AFTER_LATENCY_TIME,
-	DmResolve_GRID = DmPlayback_GRID,
-	DmResolve_BEAT = DmPlayback_BEAT,
-	DmResolve_MEASURE = DmPlayback_MEASURE,
-	DmResolve_MARKER = DmPlayback_MARKER,
-	DmResolve_SEGMENT_END = DmPlayback_SEGMENT_END,
+	DmResolve_AFTER_PREPARE_TIME = 1 << 10,
+	DmResolve_AFTER_QUEUE_TIME = 1 << 21,
+	DmResolve_AFTER_LATENCY_TIME = 1 << 22,
+	DmResolve_GRID = 1 << 11,
+	DmResolve_BEAT = 1 << 12,
+	DmResolve_MEASURE =1 << 13,
+	DmResolve_MARKER = 1 << 24,
+	DmResolve_SEGMENT_END = 1 << 23,
 } DmResolveFlags;
 
 typedef enum DmCommandType {
