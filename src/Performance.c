@@ -314,14 +314,14 @@ static int DmPerformance_musicValueToMidi(struct DmSubChord chord, DmPlayModeFla
 	if (mode & DmPlayMode_CHORD_ROOT) {
 		root = chord.chord_root;
 	} else if (mode & DmPlayMode_KEY_ROOT) {
-		Dm_report(DmLogLevel_ERROR, "DmPerformance: DmPlayMode_KEY_ROOT requested but we don't support it");
+		Dm_report(DmLogLevel_DEBUG, "DmPerformance: DmPlayMode_KEY_ROOT requested but we don't support it");
 		return -1;
 	}
 
 	// Now, to the meat of the routine: Determine the actual note position based on the chord and scale patterns!
 	if (!(mode & (DmPlayMode_CHORD_INTERVALS | DmPlayMode_SCALE_INTERVALS))) {
-		Dm_report(DmLogLevel_ERROR,
-		          "DmPerformance: DmPlayMode_CHORD_INTERVALS, nor DmPlayMode_SCALE_INTERVALS requested");
+		Dm_report(DmLogLevel_DEBUG,
+		          "DmPerformance: Neither DmPlayMode_CHORD_INTERVALS, nor DmPlayMode_SCALE_INTERVALS requested");
 		return -1;
 	}
 
