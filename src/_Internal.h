@@ -5,7 +5,9 @@
 
 #include "_Dls.h"
 #include "_Riff.h"
+#include "thread/Thread.h"
 #include "util/Array.h"
+
 #include <tsf.h>
 
 #include <stdatomic.h>
@@ -60,6 +62,8 @@ DmArray_DEFINE(DmStyleCache, struct DmStyle*);
 
 struct DmLoader {
 	_Atomic size_t reference_count;
+	mtx_t cache_lock;
+
 	bool autodownload;
 	DmResolverList resolvers;
 
@@ -421,6 +425,7 @@ typedef struct DmMessageQueue {
 
 struct DmPerformance {
 	_Atomic size_t reference_count;
+	mtx_t mod_lock;
 
 	DmMessageQueue control_queue;
 	DmMessageQueue music_queue;

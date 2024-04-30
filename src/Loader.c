@@ -18,6 +18,11 @@ DmResult DmLoader_create(DmLoader** slf, DmLoaderOptions opt) {
 	new->reference_count = 1;
 	new->autodownload = opt& DmLoader_DOWNLOAD;
 
+	if (mtx_init(&new->cache_lock, mtx_recursive) != thrd_success) {
+		Dm_free(new);
+		return DmResult_INTERNAL_ERROR;
+	}
+
 	DmResolverList_init(&new->resolvers);
 	DmStyleCache_init(&new->style_cache);
 	DmDlsCache_init(&new->dls_cache);
@@ -44,6 +49,7 @@ void DmLoader_release(DmLoader* slf) {
 		return;
 	}
 
+	mtx_destroy(&slf->cache_lock);
 	DmStyleCache_free(&slf->style_cache);
 	DmDlsCache_free(&slf->dls_cache);
 	DmResolverList_free(&slf->resolvers);
@@ -59,18 +65,32 @@ DmResult DmLoader_addResolver(DmLoader* slf, DmLoaderResolverCallback* resolve, 
 	resolver.context = ctx;
 	resolver.resolve = resolve;
 
-	return DmResolverList_add(&slf->resolvers, resolver);
+	if (mtx_lock(&slf->cache_lock) != thrd_success) {
+		return DmResult_INTERNAL_ERROR;
+	}
+
+	DmResult rv = DmResolverList_add(&slf->resolvers, resolver);
+
+	(void) mtx_unlock(&slf->cache_lock);
+	return rv;
 }
 
 void* DmLoader_resolveName(DmLoader* slf, const char* name, size_t* length) {
+	if (mtx_lock(&slf->cache_lock) != thrd_success) {
+		return NULL;
+	}
+
+	void* bytes = NULL;
 	for (size_t i = 0U; i < slf->resolvers.length; ++i) {
 		DmResolver* resolver = &slf->resolvers.data[i];
-		void* bytes = resolver->resolve(resolver->context, name, length);
+		bytes = resolver->resolve(resolver->context, name, length);
 		if (bytes != NULL) {
-			return bytes;
+			break;
 		}
 	}
-	return NULL;
+
+	(void) mtx_unlock(&slf->cache_lock);
+	return bytes;
 }
 
 DmResult DmLoader_getSegment(DmLoader* slf, char const* name, DmSegment** segment) {
@@ -120,14 +140,22 @@ DmResult DmLoader_getDownloadableSound(DmLoader* slf, DmReference const* ref, Dm
 	}
 
 	// See if we have the requested item in the cache.
+	if (mtx_lock(&slf->cache_lock) != thrd_success) {
+		return DmResult_INTERNAL_ERROR;
+	}
+
 	for (size_t i = 0; i < slf->dls_cache.length; ++i) {
 		if (!DmGuid_equals(&ref->guid, &slf->dls_cache.data[i]->guid)) {
 			continue;
 		}
 
 		*snd = DmDls_retain(slf->dls_cache.data[i]);
+
+		(void) mtx_unlock(&slf->cache_lock);
 		return DmResult_SUCCESS;
 	}
+
+	(void) mtx_unlock(&slf->cache_lock);
 
 	// Resolve and parse the DLS
 	size_t length = 0;
@@ -151,7 +179,14 @@ DmResult DmLoader_getDownloadableSound(DmLoader* slf, DmReference const* ref, Dm
 		return rv;
 	}
 
+	// Add the new item to the cache
+	if (mtx_lock(&slf->cache_lock) != thrd_success) {
+		return DmResult_INTERNAL_ERROR;
+	}
+
 	rv = DmDlsCache_add(&slf->dls_cache, DmDls_retain(*snd));
+
+	(void) mtx_unlock(&slf->cache_lock);
 	return rv;
 }
 
@@ -161,14 +196,22 @@ DmResult DmLoader_getStyle(DmLoader* slf, DmReference const* ref, DmStyle** sty)
 	}
 
 	// See if we have the requested item in the cache.
+	if (mtx_lock(&slf->cache_lock) != thrd_success) {
+		return DmResult_INTERNAL_ERROR;
+	}
+
 	for (size_t i = 0; i < slf->style_cache.length; ++i) {
 		if (!DmGuid_equals(&ref->guid, &slf->style_cache.data[i]->guid)) {
 			continue;
 		}
 
 		*sty = DmStyle_retain(slf->style_cache.data[i]);
+
+		(void) mtx_unlock(&slf->cache_lock);
 		return DmResult_SUCCESS;
 	}
+
+	(void) mtx_unlock(&slf->cache_lock);
 
 	// Resolve and parse the DLS
 	size_t length = 0;
@@ -192,6 +235,13 @@ DmResult DmLoader_getStyle(DmLoader* slf, DmReference const* ref, DmStyle** sty)
 		return rv;
 	}
 
+	// Add the new item to the cache
+	if (mtx_lock(&slf->cache_lock) != thrd_success) {
+		return DmResult_INTERNAL_ERROR;
+	}
+
 	rv = DmStyleCache_add(&slf->style_cache, DmStyle_retain(*sty));
+
+	(void) mtx_unlock(&slf->cache_lock);
 	return rv;
 }

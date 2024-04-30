@@ -25,13 +25,23 @@ DmResult DmPerformance_create(DmPerformance** slf) {
 	new->time_signature.beat = 4;
 	new->time_signature.grids_per_beat = 2;
 
+	if (mtx_init(&new->mod_lock, mtx_plain) != thrd_success) {
+		Dm_free(new);
+		return DmResult_INTERNAL_ERROR;
+	}
+
 	DmResult rv = DmMessageQueue_init(&new->control_queue);
 	if (rv != DmResult_SUCCESS) {
+		mtx_destroy(&new->mod_lock);
+		Dm_free(new);
 		return rv;
 	}
 
 	rv = DmMessageQueue_init(&new->music_queue);
 	if (rv != DmResult_SUCCESS) {
+		mtx_destroy(&new->mod_lock);
+		DmMessageQueue_free(&new->control_queue);
+		Dm_free(new);
 		return rv;
 	}
 
@@ -57,6 +67,7 @@ void DmPerformance_release(DmPerformance* slf) {
 		return;
 	}
 
+	mtx_destroy(&slf->mod_lock);
 	DmMessageQueue_free(&slf->control_queue);
 	DmMessageQueue_free(&slf->music_queue);
 	DmSegment_release(slf->segment);
@@ -116,8 +127,14 @@ DmResult DmPerformance_playSegment(DmPerformance* slf, DmSegment* sgt, DmPlaybac
 	msg.time = 0;
 	msg.type = DmMessage_SEGMENT;
 	msg.segment.segment = sgt;
+
+	if (mtx_lock(&slf->mod_lock) != thrd_success) {
+		return DmResult_INTERNAL_ERROR;
+	}
+
 	DmMessageQueue_add(&slf->control_queue, &msg, offset, DmQueueConflict_REPLACE);
 
+	(void) mtx_unlock(&slf->mod_lock);
 	return DmResult_SUCCESS;
 }
 
@@ -807,12 +824,16 @@ static void DmPerformance_handleMessage(DmPerformance* slf, DmMessage* msg) {
 	}
 }
 
-static uint32_t DmPerformance_getSampleCountFromDuration(DmPerformance* slf, uint32_t duration, uint32_t sample_rate, uint8_t channels) {
+static uint32_t DmPerformance_getSampleCountFromDuration(DmPerformance* slf,
+                                                         uint32_t duration,
+                                                         uint32_t sample_rate,
+                                                         uint8_t channels) {
 	double pulses_per_sample = Dm_getTicksPerSample(slf->time_signature, slf->tempo, sample_rate) / channels;
 	return (uint32_t) (duration / pulses_per_sample);
 }
 
-static uint32_t DmPerformance_getDurationFromSampleCount(DmPerformance* slf, uint32_t samples, uint32_t sample_rate, uint8_t channels) {
+static uint32_t
+DmPerformance_getDurationFromSampleCount(DmPerformance* slf, uint32_t samples, uint32_t sample_rate, uint8_t channels) {
 	double pulses_per_sample = Dm_getTicksPerSample(slf->time_signature, slf->tempo, sample_rate) / channels;
 	return (uint32_t) round(pulses_per_sample * samples);
 }
@@ -830,6 +851,10 @@ DmResult DmPerformance_renderPcm(DmPerformance* slf, void* buf, size_t len, DmRe
 
 	size_t sample = 0;
 	while (sample < len) {
+		if (mtx_lock(&slf->mod_lock) != thrd_success) {
+			return DmResult_INTERNAL_ERROR;
+		}
+
 		bool ok_ctrl = DmMessageQueue_get(&slf->control_queue, &msg_ctrl);
 		bool ok_midi = DmMessageQueue_get(&slf->music_queue, &msg_midi);
 
@@ -845,6 +870,11 @@ DmResult DmPerformance_renderPcm(DmPerformance* slf, void* buf, size_t len, DmRe
 			ok_midi = msg_midi.time < msg_ctrl.time;
 		}
 
+		if (ok_midi) {
+			// We only need to lock the internal mutex if the message we've got is a control message.
+			(void) mtx_unlock(&slf->mod_lock);
+		}
+
 		DmMessage* msg = ok_ctrl ? &msg_ctrl : &msg_midi;
 		uint32_t time_offset = (uint32_t) max_s32((int) msg->time - (int) slf->time, 0);
 		uint32_t offset_samples = DmPerformance_getSampleCountFromDuration(slf, time_offset, sample_rate, channels);
@@ -852,6 +882,10 @@ DmResult DmPerformance_renderPcm(DmPerformance* slf, void* buf, size_t len, DmRe
 		if (offset_samples > len - sample) {
 			// The next message does not fall into this render call (i.e. it happens after the number of
 			// samples left to process)
+
+			if (ok_ctrl) {
+				(void) mtx_unlock(&slf->mod_lock);
+			}
 			break;
 		}
 
@@ -875,6 +909,7 @@ DmResult DmPerformance_renderPcm(DmPerformance* slf, void* buf, size_t len, DmRe
 		// Handle the next message
 		if (ok_ctrl) {
 			DmMessageQueue_pop(&slf->control_queue);
+			(void) mtx_unlock(&slf->mod_lock);
 		} else {
 			DmMessageQueue_pop(&slf->music_queue);
 		}
@@ -896,6 +931,10 @@ DmResult DmPerformance_playTransition(DmPerformance* slf,
                                       DmPlaybackFlags flags) {
 	if (slf == NULL || sgt == NULL) {
 		return DmResult_INVALID_ARGUMENT;
+	}
+
+	if (mtx_lock(&slf->mod_lock) != thrd_success) {
+		return DmResult_INTERNAL_ERROR;
 	}
 
 	DmMessageQueue_clear(&slf->control_queue);
@@ -927,5 +966,6 @@ DmResult DmPerformance_playTransition(DmPerformance* slf,
 	msg.segment.segment = sgt;
 	DmMessageQueue_add(&slf->control_queue, &msg, start, DmQueueConflict_REPLACE);
 
+	(void) mtx_unlock(&slf->mod_lock);
 	return DmResult_SUCCESS;
 }

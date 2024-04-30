@@ -13,7 +13,8 @@ static void DmInt_defaultLogger(void* ctx, DmLogLevel lvl, char const* msg);
 static DmLogLevel DmGlob_logLevel = DmLogLevel_INFO;
 static DmLogHandler* DmGlob_logCallback = NULL;
 static void* DmGlob_logContext = NULL;
-static char DmGlob_logBuffer[DmGlob_logBufferSize];
+static thread_local char DmGlob_logBuffer[DmGlob_logBufferSize];
+static mtx_t DmGlob_stdoutLock;
 
 void Dm_setLogger(DmLogLevel lvl, DmLogHandler* log, void* ctx) {
 	DmGlob_logCallback = log;
@@ -25,6 +26,9 @@ void Dm_setLoggerDefault(DmLogLevel lvl) {
 	DmGlob_logCallback = DmInt_defaultLogger;
 	DmGlob_logContext = NULL;
 	DmGlob_logLevel = lvl;
+
+	mtx_destroy(&DmGlob_stdoutLock);
+	(void) mtx_init(&DmGlob_stdoutLock, mtx_plain);
 }
 
 void Dm_setLoggerLevel(DmLogLevel lvl) {
@@ -62,15 +66,6 @@ static void DmInt_defaultLogger(void* ctx, DmLogLevel lvl, char const* msg) {
 	time_t now_t = time(NULL);
 	(void) gmtime_r(&now_t, &now);
 
-	(void) fprintf(stderr,
-	               ANSI_GRAY "%04d-%02d-%02d %02d:%02d:%02d " ANSI_RESET,
-	               now.tm_year + 1900,
-	               now.tm_mon + 1,
-	               now.tm_mday,
-	               now.tm_hour,
-	               now.tm_min,
-	               now.tm_sec);
-
 	char const* format = PREFIX " (     ) › %s: %s\n";
 	switch (lvl) {
 	case DmLogLevel_FATAL:
@@ -93,5 +88,16 @@ static void DmInt_defaultLogger(void* ctx, DmLogLevel lvl, char const* msg) {
 		break;
 	}
 
+	(void) mtx_lock(&DmGlob_stdoutLock);
+	(void) fprintf(stderr,
+	               ANSI_GRAY "%04d-%02d-%02d %02d:%02d:%02d " ANSI_RESET,
+	               now.tm_year + 1900,
+	               now.tm_mon + 1,
+	               now.tm_mday,
+	               now.tm_hour,
+	               now.tm_min,
+	               now.tm_sec);
+
 	(void) fprintf(stderr, format, msg);
+	(void) mtx_unlock(&DmGlob_stdoutLock);
 }

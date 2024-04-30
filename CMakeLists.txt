@@ -17,6 +17,10 @@ list(APPEND _DM_SOURCE
         src/io/Segment.c
         src/io/Style.c
 
+        src/thread/Thread.h
+        src/thread/Thread.Posix.c
+        src/thread/Thread.Win32.c
+
         src/_Dls.h
         src/_Internal.h
         src/_Riff.h
