@@ -18,8 +18,8 @@ function(bs_select_cflags SANITIZERS COMPILE LINK)
     endif()
 
     if (MINGW)
-        list(APPEND _INTERNAL_COMPILE_FLAGS "-Wno-cast-function-type -Wno-pedantic -static")
-        list(APPEND _INTERNAL_LINK_FLAGS "-Wno-cast-function-type -Wno-pedantic -static")
+        list(APPEND _INTERNAL_COMPILE_FLAGS "-Wno-cast-function-type" "-Wno-pedantic" "-static")
+        list(APPEND _INTERNAL_LINK_FLAGS "-Wno-cast-function-type" "-Wno-pedantic" "-static")
     endif()
 
     # return _INTERNAL_COMPILE_FLAGS, _INTERNAL_LINK_FLAGS;
