@@ -437,6 +437,7 @@ struct DmPerformance {
 	DmSegment* segment;
 	uint32_t segment_start;
 	DmStyle* style;
+	DmBand* band;
 	DmSynth synth;
 
 	uint32_t variation;
@@ -458,6 +459,7 @@ DMINT void Dm_report(DmLogLevel lvl, char const* fmt, ...);
 DMINT size_t max_usize(size_t a, size_t b);
 DMINT int32_t max_s32(int32_t a, int32_t b);
 DMINT float clamp_f32(float val, float min, float max);
+DMINT DmCommandType Dm_embellishmentToCommand(DmEmbellishmentType embellishment);
 DMINT bool DmGuid_equals(DmGuid const* a, DmGuid const* b);
 DMINT void DmTimeSignature_parse(DmTimeSignature* slf, DmRiff* rif);
 

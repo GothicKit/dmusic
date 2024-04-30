@@ -74,6 +74,7 @@ void DmPerformance_release(DmPerformance* slf) {
 	DmMessageQueue_free(&slf->music_queue);
 	DmSegment_release(slf->segment);
 	DmStyle_release(slf->style);
+	DmBand_release(slf->band);
 	DmSynth_free(&slf->synth);
 	Dm_free(slf);
 }
@@ -122,7 +123,7 @@ DmResult DmPerformance_playSegment(DmPerformance* slf, DmSegment* sgt, DmTiming 
 	DmMessage msg;
 	msg.time = 0;
 	msg.type = DmMessage_SEGMENT;
-	msg.segment.segment = sgt;
+	msg.segment.segment = DmSegment_retain(sgt);
 	msg.segment.loop = 0;
 
 	if (mtx_lock(&slf->mod_lock) != thrd_success) {
@@ -445,9 +446,9 @@ static uint32_t DmPerformance_convertIoTimeRange(uint8_t range) {
 }
 
 static void DmPerformance_playPattern(DmPerformance* slf, DmPattern* pttn) {
-	DmSynth_reset(&slf->synth);
 	DmMessageQueue_clear(&slf->music_queue);
 	DmSynth_sendNoteOffEverything(&slf->synth);
+	DmSynth_reset(&slf->synth);
 
 	int variation_lock[256];
 	for (size_t i = 0; i < 256; ++i) {
@@ -711,10 +712,12 @@ static void DmPerformance_handleMessage(DmPerformance* slf, DmMessage* msg) {
 		if (sgt == NULL) {
 			DmSegment_release(slf->segment);
 			DmStyle_release(slf->style);
+			DmBand_release(slf->band);
 
 			slf->time = 0;
 			slf->style = NULL;
 			slf->segment = NULL;
+			slf->band = NULL;
 			break;
 		}
 
@@ -773,6 +776,8 @@ static void DmPerformance_handleMessage(DmPerformance* slf, DmMessage* msg) {
 		break;
 	case DmMessage_BAND:
 		// TODO(lmichaelis): The band in this message might have already been de-allocated!
+		DmBand_release(slf->band);
+		slf->band = DmBand_retain(msg->band.band);
 		DmSynth_sendBandUpdate(&slf->synth, msg->band.band);
 		Dm_report(DmLogLevel_DEBUG,
 		          "DmPerformance: MESSAGE time=%d msg=band-change band=\"%s\"",
@@ -949,9 +954,108 @@ DmResult DmPerformance_renderPcm(DmPerformance* slf, void* buf, size_t len, DmRe
 	return DmResult_SUCCESS;
 }
 
-DmResult DmPerformance_playTransition(DmPerformance* slf,
-                                      DmSegment* sgt,
-                                      DmEmbellishmentType embellishment, DmTiming timing) {
+static DmResult DmPerformance_composeTransition(DmPerformance* slf,
+                                                DmSegment* to,
+                                                DmEmbellishmentType embellishment,
+                                                DmSegment** out) {
+	DmResult rv = DmSegment_create(out);
+	if (rv != DmResult_SUCCESS) {
+		return rv;
+	}
+
+	DmSegment* trans = *out;
+	trans->repeats = 1;
+	trans->length = 0;
+	trans->play_start = 0;
+	trans->loop_start = 0;
+	trans->loop_end = trans->length;
+	trans->downloaded = true;
+	trans->info.unam = "Composed Transition";
+
+	// NOTE: We only support transitions of length 1 (measure)
+
+	DmMessage msg;
+	msg.time = 0;
+
+	if (embellishment != DmEmbellishment_NONE) {
+		msg.type = DmMessage_TEMPO;
+		msg.tempo.tempo = slf->tempo;
+		rv = DmMessageList_add(&trans->messages, msg);
+		if (rv != DmResult_SUCCESS) {
+			return rv;
+		}
+
+		msg.type = DmMessage_BAND;
+		msg.band.band = DmBand_retain(slf->band);
+		rv = DmMessageList_add(&trans->messages, msg);
+		if (rv != DmResult_SUCCESS) {
+			return rv;
+		}
+
+		msg.type = DmMessage_STYLE;
+		msg.style.style = DmStyle_retain(slf->style);
+		rv = DmMessageList_add(&trans->messages, msg);
+		if (rv != DmResult_SUCCESS) {
+			return rv;
+		}
+
+		msg.type = DmMessage_CHORD;
+		msg.chord = slf->chord;
+		rv = DmMessageList_add(&trans->messages, msg);
+		if (rv != DmResult_SUCCESS) {
+			return rv;
+		}
+
+		if (embellishment == DmEmbellishment_END_AND_INTRO) {
+			// Complex "extro" plus "intro" transitoon
+			msg.type = DmMessage_COMMAND;
+			msg.command.command = DmCommand_END;
+			msg.command.groove_level = slf->groove;
+			msg.command.groove_range = slf->groove_range;
+			msg.command.repeat_mode = DmPatternSelect_NO_REPEAT;
+			msg.command.beat = 0;
+			msg.command.measure = 0;
+			rv = DmMessageList_add(&trans->messages, msg);
+			if (rv != DmResult_SUCCESS) {
+				return rv;
+			}
+
+			trans->length = Dm_getMeasureLength(slf->time_signature);
+
+			// TODO(lmichaelis): implement "end-and-intro" transitions
+			Dm_report(DmLogLevel_WARN, "DmPerformance: Complex END_AND_INTRO transition is not yet supported. Only playing END");
+		} else {
+			// Basic "extro"-style transition
+			msg.type = DmMessage_COMMAND;
+			msg.command.command = Dm_embellishmentToCommand(embellishment);
+			msg.command.groove_level = slf->groove;
+			msg.command.groove_range = slf->groove_range;
+			msg.command.repeat_mode = DmPatternSelect_NO_REPEAT;
+			msg.command.beat = 0;
+			msg.command.measure = 0;
+			rv = DmMessageList_add(&trans->messages, msg);
+			if (rv != DmResult_SUCCESS) {
+				return rv;
+			}
+
+			trans->length = Dm_getMeasureLength(slf->time_signature);
+		}
+	}
+
+	msg.type = DmMessage_SEGMENT;
+	msg.time = trans->length;
+	msg.segment.segment = DmSegment_retain(to);
+	msg.segment.loop = 0;
+	rv = DmMessageList_add(&trans->messages, msg);
+	if (rv != DmResult_SUCCESS) {
+		return rv;
+	}
+
+	return DmResult_SUCCESS;
+}
+
+DmResult
+DmPerformance_playTransition(DmPerformance* slf, DmSegment* sgt, DmEmbellishmentType embellishment, DmTiming timing) {
 	if (slf == NULL || sgt == NULL) {
 		return DmResult_INVALID_ARGUMENT;
 	}
@@ -966,40 +1070,18 @@ DmResult DmPerformance_playTransition(DmPerformance* slf,
 		return DmResult_INVALID_ARGUMENT;
 	}
 
-	if (mtx_lock(&slf->mod_lock) != thrd_success) {
-		return DmResult_INTERNAL_ERROR;
+	DmSegment* transition = NULL;
+	DmResult rv = DmPerformance_composeTransition(slf, sgt, embellishment, &transition);
+	if (rv != DmResult_SUCCESS) {
+		return rv;
 	}
 
-	DmMessageQueue_clear(&slf->control_queue);
-
-	// TODO: This is wrong!
-	uint32_t start = DmPerformance_getStartTime(slf, timing);
-	if (embellishment != DmEmbellishment_NONE) {
-		// TODO: This won't work if there are multiple possible pattern
-		DmPattern* pattern = DmPerformance_choosePattern(slf, (DmCommandType) embellishment);
-
-		if (pattern != NULL) {
-			DmMessage msg;
-			msg.type = DmMessage_COMMAND;
-			msg.command.command = (DmCommandType) embellishment;
-			msg.command.groove_level = pattern->groove_bottom;
-			msg.command.groove_range = 0;
-			msg.command.measure = 0;
-			msg.command.beat = 0;
-			msg.command.repeat_mode = DmPatternSelect_RANDOM;
-
-			DmMessageQueue_add(&slf->control_queue, &msg, start, DmQueueConflict_REPLACE);
-
-			start += Dm_getMeasureLength(pattern->time_signature) * pattern->length_measures;
-		}
+	rv = DmPerformance_playSegment(slf, transition, timing);
+	if (rv != DmResult_SUCCESS) {
+		return rv;
 	}
 
-	DmMessage msg;
-	msg.type = DmMessage_SEGMENT;
-	msg.segment.segment = sgt;
-	DmMessageQueue_add(&slf->control_queue, &msg, start, DmQueueConflict_REPLACE);
-
-	(void) mtx_unlock(&slf->mod_lock);
+	DmSegment_release(transition);
 	return DmResult_SUCCESS;
 }
 
