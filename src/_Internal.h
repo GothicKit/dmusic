@@ -401,6 +401,8 @@ struct DmSegment {
 	DmVersion version;
 
 	DmMessageList messages;
+
+	bool downloaded;
 };
 
 typedef enum DmQueueConflictResolution {

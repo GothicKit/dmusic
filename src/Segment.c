@@ -69,5 +69,6 @@ DmResult DmSegment_download(DmSegment* slf, DmLoader* loader) {
 		}
 	}
 
+	slf->downloaded = true;
 	return rv;
 }

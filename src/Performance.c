@@ -119,8 +119,13 @@ DmResult DmPerformance_playSegment(DmPerformance* slf, DmSegment* sgt, DmPlaybac
 		return DmResult_INVALID_ARGUMENT;
 	}
 
-	if (flags & DmPlayback_DEFAULT) {
+	if (flags & DmPlayback_DEFAULT && sgt != NULL) {
 		flags = (DmPlaybackFlags) sgt->resolution;
+	}
+
+	if (sgt != NULL && !sgt->downloaded) {
+		Dm_report(DmLogLevel_ERROR, "DmPerformance: You must download the segment before play it");
+		return DmResult_INVALID_ARGUMENT;
 	}
 
 	uint32_t offset = DmPerformance_getStartTime(slf, flags);
@@ -705,16 +710,6 @@ static void DmPerformance_handleCommandMessage(DmPerformance* slf, DmMessage_Com
 static void DmPerformance_handleMessage(DmPerformance* slf, DmMessage* msg) {
 	switch (msg->type) {
 	case DmMessage_SEGMENT: {
-		Dm_report(DmLogLevel_DEBUG,
-		          "DmPerformance: MESSAGE time=%d msg=segment-change segment=\"%s\"",
-		          slf->time,
-		          msg->segment.segment->info.unam);
-		Dm_report(DmLogLevel_DEBUG,
-		          "DmPerformance: Playing segment \"%s\" (repeat %d/%d)",
-		          msg->segment.segment->info.unam,
-		          msg->segment.loop + 1,
-		          msg->segment.segment->repeats);
-
 		// TODO(lmichaelis): The segment in this message might no longer be valid, since we
 		// have called `pop` on the queue but not kept a strong reference to the message!
 		DmSegment* sgt = msg->segment.segment;
@@ -722,6 +717,28 @@ static void DmPerformance_handleMessage(DmPerformance* slf, DmMessage* msg) {
 		DmMessageQueue_clear(&slf->control_queue);
 		DmMessageQueue_clear(&slf->music_queue);
 		DmSynth_sendNoteOffEverything(&slf->synth);
+
+		// If a `NULL`-segment is provided, simply stop the playing segment!
+		if (sgt == NULL) {
+			DmSegment_release(slf->segment);
+			DmStyle_release(slf->style);
+
+			slf->time = 0;
+			slf->style = NULL;
+			slf->segment = NULL;
+			break;
+		}
+
+		Dm_report(DmLogLevel_DEBUG,
+				  "DmPerformance: MESSAGE time=%d msg=segment-change segment=\"%s\"",
+				  slf->time,
+				  msg->segment.segment->info.unam);
+		Dm_report(DmLogLevel_DEBUG,
+				  "DmPerformance: Playing segment \"%s\" (repeat %d/%d)",
+				  msg->segment.segment->info.unam,
+				  msg->segment.loop + 1,
+				  msg->segment.segment->repeats);
+
 
 		// Reset the time to combat drift
 		uint32_t loop_offset = msg->segment.loop > 0 ? sgt->loop_start : 0;
@@ -758,6 +775,7 @@ static void DmPerformance_handleMessage(DmPerformance* slf, DmMessage* msg) {
 	}
 	case DmMessage_STYLE:
 		// TODO(lmichaelis): The style in this message might have already been de-allocated!
+		DmStyle_release(slf->style);
 		slf->style = DmStyle_retain(msg->style.style);
 		slf->time_signature = slf->style->time_signature;
 		Dm_report(DmLogLevel_DEBUG,
@@ -948,6 +966,16 @@ DmResult DmPerformance_playTransition(DmPerformance* slf,
                                       DmEmbellishmentType embellishment,
                                       DmPlaybackFlags flags) {
 	if (slf == NULL || sgt == NULL) {
+		return DmResult_INVALID_ARGUMENT;
+	}
+
+	// If no segment is currently playing, simply start playing the
+	// new segment without a transition.
+	if (slf->segment == NULL) {
+		return DmPerformance_playSegment(slf, sgt, flags);
+	}
+
+	if (!sgt->downloaded) {
 		return DmResult_INVALID_ARGUMENT;
 	}
 
