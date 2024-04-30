@@ -127,6 +127,7 @@ DmResult DmPerformance_playSegment(DmPerformance* slf, DmSegment* sgt, DmPlaybac
 	msg.time = 0;
 	msg.type = DmMessage_SEGMENT;
 	msg.segment.segment = sgt;
+	msg.segment.loop = 0;
 
 	if (mtx_lock(&slf->mod_lock) != thrd_success) {
 		return DmResult_INTERNAL_ERROR;
