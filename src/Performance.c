@@ -513,7 +513,14 @@ static void DmPerformance_playPattern(DmPerformance* slf, DmPattern* pttn) {
 
 			DmPlayModeFlags flags =
 			    note.play_mode_flags == DmPlayMode_NONE ? part->play_mode_flags : note.play_mode_flags;
-			int midi = DmPerformance_musicValueToMidi(chord, flags, note.music_value);
+
+			int midi = -1;
+			if (flags == DmPlayMode_FIXED) {
+				midi = note.music_value;
+			} else {
+				midi = DmPerformance_musicValueToMidi(chord, flags, note.music_value);
+			}
+
 			if (midi < 0) {
 				// We were unable to convert the music value
 				Dm_report(DmLogLevel_WARN, "DmPerformance: Unable to convert music value %d to MIDI", note.music_value);

@@ -113,6 +113,7 @@ typedef struct DmBand {
 } DmBand;
 
 typedef enum DmPlayModeFlags {
+	DmPlayMode_FIXED = 0, // Special case: music value == midi value
 	DmPlayMode_KEY_ROOT = 1,
 	DmPlayMode_CHORD_ROOT = 2,
 	DmPlayMode_SCALE_INTERVALS = 4,
