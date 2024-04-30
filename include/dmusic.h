@@ -272,7 +272,7 @@ typedef enum DmEmbellishmentType {
 	DmEmbellishment_INTRO = 3,
 	DmEmbellishment_BREAK = 4,
 	DmEmbellishment_END = 5,
-	DmEmbellishment_END_AND_INTRO = 5,
+	DmEmbellishment_END_AND_INTRO = 6,
 } DmEmbellishmentType;
 
 DMAPI DmResult DmPerformance_create(DmPerformance** slf);
