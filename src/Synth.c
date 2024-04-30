@@ -63,21 +63,39 @@ void DmSynth_reset(DmSynth* slf) {
 //                   instead of reloading the entire instrument list and re-creating all TSFs.
 // See also: https://documentation.help/DirectMusic/usingbands.htm
 void DmSynth_sendBandUpdate(DmSynth* slf, DmBand* band) {
-	if (slf == NULL) {
+	if (slf == NULL || band == NULL) {
 		return;
 	}
 
 	// Optimization: Don't re-alloc the entire thing if we're getting the same band
-	if (band == slf->band) {
+	// TODO(lmichaelis): This is a stop-gap solution to prevent audio flicker when replacing TSFs. It
+	//                   only works if all band instruments are in the same order and use the same DLS.
+	//                   When switching between actual bands, this will break!
+	if (DmBand_isSortOfSameAs(slf->band, band)) {
+		for (size_t i = 0; i < band->instrument_count; ++i) {
+			DmInstrument* ins = &band->instruments[i];
+			if (slf->channels[ins->channel].synth == NULL) {
+				continue;
+			}
+
+			float pan = (ins->flags & DmInstrument_PAN) ? (float) ins->pan / DmInt_MIDI_MAX : DmInt_PAN_CENTER;
+			float vol = (ins->flags & DmInstrument_VOLUME) ? (float) ins->volume / DmInt_MIDI_MAX : DmInt_VOLUME_MAX;
+
+			bool res = tsf_channel_set_pan(slf->channels[ins->channel].synth, 0, pan);
+			if (!res) {
+				Dm_report(DmLogLevel_ERROR, "DmSynth: tsf_channel_set_pan encountered an error.");
+			}
+
+			slf->channels[ins->channel].pitch_bend_reset = DmInt_PITCH_BEND_NEUTRAL;
+			slf->channels[ins->channel].volume = vol;
+			slf->channels[ins->channel].volume_reset = vol;
+			slf->channels[ins->channel].pan_reset = pan;
+		}
 		return;
 	}
 
 	slf->band = band;
 	DmSynth_freeChannels(slf);
-
-	if (band == NULL) {
-		return;
-	}
 
 	// Calculate the number of required performance channels
 	for (size_t i = 0; i < band->instrument_count; ++i) {

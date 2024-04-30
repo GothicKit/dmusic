@@ -125,6 +125,28 @@ DmResult DmBand_download(DmBand* slf, DmLoader* loader) {
 	return rv;
 }
 
+bool DmBand_isSortOfSameAs(DmBand* slf, DmBand* oth) {
+	if (slf == oth) {
+		return true;
+	}
+
+	if (slf == NULL || oth == NULL) {
+		return false;
+	}
+
+	if (slf->instrument_count != oth->instrument_count) {
+		return false;
+	}
+
+	for (size_t i = 0; i < oth->instrument_count; ++i) {
+		if (slf->instruments[i].dls != oth->instruments[i].dls) {
+			return false;
+		}
+	}
+
+	return true;
+}
+
 void DmInstrument_free(DmInstrument* slf) {
 	if (slf == NULL || slf->dls == NULL) {
 		return;

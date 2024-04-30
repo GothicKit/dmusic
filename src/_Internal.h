@@ -488,6 +488,7 @@ DMINT DmBand* DmBand_retain(DmBand* slf);
 DMINT void DmBand_release(DmBand* slf);
 DMINT DmResult DmBand_parse(DmBand* slf, DmRiff* rif);
 DMINT DmResult DmBand_download(DmBand* slf, DmLoader* loader);
+DMINT bool DmBand_isSortOfSameAs(DmBand* slf, DmBand* oth);
 DMINT void DmInstrument_free(DmInstrument* slf);
 
 DMINT DmResult DmStyle_create(DmStyle** slf);
