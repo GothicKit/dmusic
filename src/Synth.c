@@ -277,9 +277,9 @@ size_t DmSynth_render(DmSynth* slf, void* buf, size_t len, DmRenderOptions fmt) 
 		vol *= slf->volume;
 
 		if (fmt & DmRender_FLOAT) {
-			tsf_render_float(slf->channels[i].synth, buf, (int) len / channels, true, vol);
+			tsf_render_float(slf->channels[i].synth, buf, (int) len / channels, i != 0, vol);
 		} else {
-			tsf_render_short(slf->channels[i].synth, buf, (int) len / channels, true, vol);
+			tsf_render_short(slf->channels[i].synth, buf, (int) len / channels, i != 0, vol);
 		}
 	}
 
