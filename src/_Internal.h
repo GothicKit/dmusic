@@ -453,32 +453,29 @@ typedef union DmMessage {
 
 DmArray_DEFINE(DmMessageList, DmMessage);
 
-typedef struct DmSynthInstrument {
-	tsf* synth;
+typedef struct DmSynthFont {
 	DmDls* dls;
+	tsf* syn;
+} DmSynthFont;
 
-	uint16_t bank;
-	uint16_t patch;
-	uint32_t channel;
+typedef struct DmSynthChannel {
+	DmSynthFont* font;
+	int32_t channel;
+	int32_t transpose;
 
-	float volume;
-	float volume_reset;
-	float pan_reset;
-	int pitch_bend_reset;
-	int16_t transpose;
-} DmSynthInstrument;
+	float reset_volume;
+	float reset_pan;
+	int reset_pitch;
+} DmSynthChannel;
 
-DmArray_DEFINE(DmSynthInstrumentArray, DmSynthInstrument);
+DmArray_DEFINE(DmSynthFontArray, DmSynthFont);
 
 typedef struct DmSynth {
-	size_t channel_count;
-	DmSynthInstrument** channels;
+	uint32_t rate;
+	DmSynthFontArray fonts;
 
-	DmSynthInstrumentArray instruments;
-
-	DmBand* band;
-	uint32_t sample_rate;
-	float volume;
+	size_t channels_len;
+	DmSynthChannel* channels;
 } DmSynth;
 
 struct DmSegment {
@@ -624,7 +621,7 @@ DMINT void DmSynth_free(DmSynth* slf);
 DMINT void DmSynth_reset(DmSynth* slf);
 
 DMINT void DmSynth_setVolume(DmSynth* slf, float vol);
-DMINT DmResult DmSynth_createTsfForInstrument(DmInstrument* slf, tsf** out);
+DMINT DmResult DmSynth_createTsfForDls(DmDls* dls, tsf** out);
 DMINT void DmSynth_sendBandUpdate(DmSynth* slf, DmBand* band);
 DMINT void DmSynth_sendControl(DmSynth* slf, uint32_t channel, uint8_t control, float value);
 DMINT void DmSynth_sendControlReset(DmSynth* slf, uint32_t channel, uint8_t control, float reset);

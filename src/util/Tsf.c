@@ -34,7 +34,7 @@ enum {
 	kSamplePadding = 46,
 };
 
-static size_t DmSynth_convertGeneratorArticulators(struct tsf_hydra_igen* gens, DmDlsArticulator* art) {
+static size_t DmSynth_insertGeneratorArticulators(struct tsf_hydra_igen* gens, DmDlsArticulator* art) {
 	size_t count = 0;
 
 	for (size_t k = 0; k < art->connection_count; ++k) {
@@ -141,27 +141,19 @@ static size_t DmSynth_convertGeneratorArticulators(struct tsf_hydra_igen* gens, 
 	return count;
 }
 
-DmResult DmSynth_createTsfForInstrument(DmInstrument* slf, tsf** out) {
-	DmDlsInstrument* dls = DmInstrument_getDlsInstrument(slf);
-	if (dls == NULL) {
-		return DmResult_NOT_FOUND;
-	}
-
-	// 1. Decode the samples for each region into a contiguous array and create the SF2
-	//    sample headers for them.
-
-	// 1.1. Count the number of PCM samples actually required after decoding.
+static DmResult Dm_createHydraSamplesForDls(DmDls* dls, float** pcm, int32_t* pcm_len, struct tsf_hydra_shdr** cfg, int32_t* cfg_len) {
+	// 1. Count the number of PCM samples actually required after decoding.
 	size_t sample_count = 0;
-	for (uint32_t i = 0; i < dls->region_count; ++i) {
-		DmDlsWave* wav = &slf->dls->wave_table[dls->regions[i].link_table_index];
+	for (uint32_t i = 0; i < dls->wave_table_size; ++i) {
+		DmDlsWave* wav = &dls->wave_table[i];
 		sample_count += DmDls_decodeSamples(wav, NULL, 0);
 
 		// There are 46 0-samples after each "real" sample
 		sample_count += kSamplePadding;
 	}
 
-	// 1.2. Decode all required samples
-	size_t sample_headers_length = dls->region_count + 1; // One for the sentinel
+	// 2. Decode all required samples
+	size_t sample_headers_length = dls->wave_table_size + 1; // One for the sentinel
 	struct tsf_hydra_shdr* sample_headers = Dm_alloc(sizeof(struct tsf_hydra_shdr) * sample_headers_length);
 	if (sample_headers == NULL) {
 		return DmResult_MEMORY_EXHAUSTED;
@@ -173,8 +165,8 @@ DmResult DmSynth_createTsfForInstrument(DmInstrument* slf, tsf** out) {
 	}
 
 	size_t sample_offset = 0;
-	for (uint32_t i = 0; i < dls->region_count; ++i) {
-		DmDlsWave* wav = &slf->dls->wave_table[dls->regions[i].link_table_index];
+	for (uint32_t i = 0; i < dls->wave_table_size; ++i) {
+		DmDlsWave* wav = &dls->wave_table[i];
 
 		strncpy(sample_headers[i].sampleName, wav->info.inam, 19);
 
@@ -190,207 +182,266 @@ DmResult DmSynth_createTsfForInstrument(DmInstrument* slf, tsf** out) {
 
 	strncpy(sample_headers[sample_headers_length - 1].sampleName, "EOS", 19);
 
-	// 2. Generate the SF2 instrument zones from the DLS instrument regions.
+	*pcm = samples;
+	*pcm_len = sample_count;
+	*cfg = sample_headers;
+	*cfg_len = (int) sample_headers_length;
+	return DmResult_SUCCESS;
+}
 
-	// 2.1. Count the number of SF2 instrument generators (and modulators) required
-	// NOTE: One for the sentinel, 6 for the implicit generators 'kKeyRange',
-	//       'kVelRange', 'kAttackVolEnv', 'kInitialAttenuation', 'kSampleModes' and 'kSampleID' for each zone
-	size_t instrument_generator_count = 1 + (6 * dls->region_count);
+static DmResult Dm_createHydra(DmDls* dls, struct tsf_hydra* res) {
+	// 1. Count the number of presets required and allocate them
+	// -> We need one for each instrument
+	res->phdrNum = dls->instrument_count + 1; // One for the sentinel
+	res->phdrs = Dm_alloc(sizeof(struct tsf_hydra_phdr) * res->phdrNum);
 
-	// NOTE: We only support generators at the moment.
-	for (size_t i = 0; i < dls->region_count; ++i) {
-		DmDlsRegion* region = &dls->regions[i];
-		for (size_t j = 0; j < region->articulator_count; ++j) {
-			DmDlsArticulator* articulator = &region->articulators[j];
-			instrument_generator_count += articulator->connection_count;
-		}
-	}
+	// 2. Count the number of preset zones required and allocate them
+	// -> We need one for each instrument
+	res->pbagNum = dls->instrument_count + 1; // One for the sentinel
+	res->pbags = Dm_alloc(sizeof(struct tsf_hydra_pbag) * res->pbagNum);
 
-	for (size_t j = 0; j < dls->articulator_count; ++j) {
-		DmDlsArticulator* articulator = &dls->articulators[j];
-		instrument_generator_count += articulator->connection_count * dls->region_count;
-	}
+	// 3. Count the number of preset generators required and allocate them
+	// -> We need one for each instrument to indicate the instrument index
+	res->pgenNum = dls->instrument_count + 1; // One for the sentinel
+	res->pgens = Dm_alloc(sizeof(struct tsf_hydra_pgen) * res->pgenNum);
 
-	// 2.2. Actually create the instrument zone definitions
-	size_t instrument_zones_length = dls->region_count + 1; // One for the sentinel
-	struct tsf_hydra_ibag* instrument_zones = Dm_alloc(sizeof(struct tsf_hydra_shdr) * instrument_zones_length);
-	struct tsf_hydra_igen* instrument_generators = Dm_alloc(sizeof(struct tsf_hydra_igen) * instrument_generator_count);
-	struct tsf_hydra_imod instrument_modulators[1]; // Only one, indicating a sentinel, for now
+	// 4. Count the number of preset modulators required and allocate them
+	// -> We need one sentinel (modulators are not supported)
+	res->pmodNum = 1; // One for the sentinel
+	res->pmods = Dm_alloc(sizeof(struct tsf_hydra_pmod) * res->pmodNum);
 
-	if (instrument_zones == NULL || instrument_generators == NULL) {
-		return DmResult_MEMORY_EXHAUSTED;
-	}
+	// 5. Count the number of instruments required and allocate them
+	// -> We need one for each instrument
+	res->instNum = dls->instrument_count + 1; // One for the sentinel
+	res->insts = Dm_alloc(sizeof(struct tsf_hydra_inst) * res->instNum);
 
-	size_t generator_index = 0;
-	for (size_t i = 0; i < dls->region_count; ++i) {
-		DmDlsRegion* region = &dls->regions[i];
+	// 6. Count the number of instrument zones and generators required and allocate them
+	res->ibagNum = 1; // One for the sentinel
+	res->igenNum = 1; // One for the sentinel
 
-		// Instrument zone header.
-		instrument_zones[i].instGenNdx = (tsf_u16) generator_index;
-		instrument_zones[i].instModNdx = 0; // TODO(lmichaelis): Implement modulators.
+	for (size_t i = 0; i < dls->instrument_count; ++i) {
+		DmDlsInstrument* ins = &dls->instruments[i];
 
-		struct tsf_hydra_igen* gen;
-		gen = &instrument_generators[generator_index++];
-		gen->genOper = kKeyRange;
-		gen->genAmount.range.hi = (tsf_u8) region->range_high;
-		gen->genAmount.range.lo = (tsf_u8) region->range_low;
+		// -> We need zone one for each instrument region
+		res->ibagNum += ins->region_count;
 
-		gen = &instrument_generators[generator_index++];
-		gen->genOper = kVelRange;
+		// -> We need 6 generators for the implicit 'kKeyRange', 'kVelRange', 'kAttackVolEnv',
+		//   'kInitialAttenuation', 'kSampleModes' and 'kSampleID' for each zone
+		res->igenNum += ins->region_count * 6;
 
-		if (region->velocity_high <= region->velocity_low) {
-			gen->genAmount.range.hi = 127;
-			gen->genAmount.range.lo = 0;
-		} else {
-			gen->genAmount.range.hi = (tsf_u8) region->velocity_high;
-			gen->genAmount.range.lo = (tsf_u8) region->velocity_low;
+		// -> We need one generator for each instrument-level articulator connection
+		for (size_t a = 0; a < ins->articulator_count; ++a) {
+			res->igenNum += ins->articulators[a].connection_count * ins->region_count;
 		}
 
-		gen = &instrument_generators[generator_index++];
-		gen->genOper = kAttackVolEnv;
-		gen->genAmount.shortAmount = sf2SecondsToTimeCents(0.1);
+		// -> We need one generator for each region-level articulator connection
+		for (size_t r = 0; r < ins->region_count; ++r) {
+			DmDlsRegion* reg = &ins->regions[r];
 
-		gen = &instrument_generators[generator_index++];
-		gen->genOper = kInitialAttenuation;
-		gen->genAmount.shortAmount = (tsf_s16) region->sample.attenuation;
-
-		for (size_t j = 0; j < region->articulator_count; ++j) {
-			DmDlsArticulator* articulator = &region->articulators[j];
-
-			gen = &instrument_generators[generator_index];
-			generator_index += DmSynth_convertGeneratorArticulators(gen, articulator);
-		}
-
-		for (size_t j = 0; j < dls->articulator_count; ++j) {
-			DmDlsArticulator* articulator = &dls->articulators[j];
-
-			gen = &instrument_generators[generator_index];
-			generator_index += DmSynth_convertGeneratorArticulators(gen, articulator);
-		}
-
-		gen = &instrument_generators[generator_index++];
-		gen->genOper = kSampleModes;
-		gen->genAmount.wordAmount = region->sample.looping == true ? 1 : 0;
-
-		gen = &instrument_generators[generator_index++];
-		gen->genOper = kSampleID;
-		gen->genAmount.wordAmount = (tsf_u16) i;
-
-		// Additional sample configuration.
-		if (region->sample.looping) {
-			uint32_t offset = sample_headers[i].start;
-			sample_headers[i].startLoop = offset + region->sample.loop_start;
-			sample_headers[i].endLoop = offset + region->sample.loop_start + region->sample.loop_length;
-
-			// NOTE: Fix for sound cutting off too early. When using TSF.
-			if (sample_headers[i].endLoop > sample_headers[i].end) {
-				sample_headers[i].endLoop = sample_headers[i].end;
+			for (size_t a = 0; a < reg->articulator_count; ++a) {
+				res->igenNum += reg->articulators[a].connection_count;
 			}
-		} else {
-			sample_headers[i].startLoop = 0;
-			sample_headers[i].endLoop = 0;
 		}
-
-		sample_headers[i].originalPitch = (tsf_u8) region->sample.unity_note;
-		sample_headers[i].pitchCorrection = (tsf_s8) region->sample.fine_tune;
 	}
 
-	// 2.3. Make sure the sentinel values are correct
-	instrument_zones[dls->region_count].instGenNdx = (tsf_u16) generator_index;
-	instrument_zones[dls->region_count].instModNdx = 0;
+	res->ibags = Dm_alloc(sizeof(struct tsf_hydra_ibag) * res->ibagNum);
+	res->igens = Dm_alloc(sizeof(struct tsf_hydra_igen) * res->igenNum);
 
-	// 3. Generate preset-level articulators
+	// 7. Count the number of instrument modulators required and allocate them
+	// -> We need one sentinel (modulators are not supported)
+	res->imodNum = 1; // One for the sentinel
+	res->imods = Dm_alloc(sizeof(struct tsf_hydra_imod) * res->imodNum);
 
-	struct tsf_hydra_pbag preset_zones[2];      // One for the sentinel
-	struct tsf_hydra_pgen preset_generators[2]; // One for the sentinel
-	struct tsf_hydra_pmod preset_modulators[1]; // Only the sentinel
+	bool ok =
+	    res->phdrs && res->pbags && res->pgens && res->pmods && res->insts && res->ibags && res->igens && res->imods;
+	return ok ? DmResult_SUCCESS : DmResult_MEMORY_EXHAUSTED;
+}
 
-	preset_generators[0].genOper = kInstrument;
-	preset_generators[0].genAmount.wordAmount = 0;
-	generator_index += 1;
+DmResult DmSynth_createTsfForDls(DmDls* dls, tsf** out) {
+	if (dls == NULL) {
+		return DmResult_INVALID_ARGUMENT;
+	}
 
-	preset_generators[1].genOper = 0;
-	preset_generators[1].genAmount.wordAmount = 1;
-	generator_index += 1;
-
-	preset_zones[0].genNdx = 0;
-	preset_zones[0].modNdx = 0;
-	preset_zones[1].genNdx = (tsf_u16) generator_index;
-	preset_zones[1].modNdx = 0;
-
-	// 4. Finalize the instrument and preset
-	struct tsf_hydra_phdr preset_headers[2]; // One for the sentinel
-
-	strncpy(preset_headers[0].presetName, dls->info.inam, 19);
-	strncpy(preset_headers[1].presetName, "EOP", 19);
-
-	preset_headers[0].bank = 0;
-	preset_headers[0].preset = 0;
-	preset_headers[0].genre = 0;
-	preset_headers[0].morphology = 0;
-	preset_headers[0].library = 0;
-	preset_headers[0].presetBagNdx = 0;
-
-	preset_headers[1].bank = 0;
-	preset_headers[1].preset = 0;
-	preset_headers[1].genre = 0;
-	preset_headers[1].morphology = 0;
-	preset_headers[1].library = 0;
-	preset_headers[1].presetBagNdx = 1;
-
-	struct tsf_hydra_inst instrument_headers[2]; // One for the sentinel
-
-	strncpy(instrument_headers[0].instName, dls->info.inam, 19);
-	strncpy(instrument_headers[1].instName, "EOI", 19);
-
-	instrument_headers[0].instBagNdx = 0;
-	instrument_headers[1].instBagNdx = (tsf_u16) dls->region_count;
-
-	// 5. Generate the tsf instance
-
+	// Initialize the hydra by allocation all required memory
 	struct tsf_hydra hydra;
-	hydra.phdrs = preset_headers;
-	hydra.phdrNum = 2;
-	hydra.pbags = preset_zones;
-	hydra.pbagNum = 2;
-	hydra.pgens = preset_generators;
-	hydra.pgenNum = 2;
-	hydra.pmods = preset_modulators;
-	hydra.pmodNum = 1;
-	hydra.insts = instrument_headers;
-	hydra.instNum = 2;
-	hydra.ibags = instrument_zones;
-	hydra.ibagNum = (tsf_u16) instrument_zones_length;
-	hydra.igens = instrument_generators;
-	hydra.igenNum = (tsf_u16) instrument_generator_count;
-	hydra.imods = instrument_modulators;
-	hydra.imodNum = 1;
-	hydra.shdrs = sample_headers;
-	hydra.shdrNum = (tsf_u16) sample_headers_length;
 
+	DmResult rv = Dm_createHydra(dls, &hydra);
+	if (rv != DmResult_SUCCESS) {
+		return rv;
+	}
+
+	// Decode all PCM and create the sample headers.
+	float* pcm = NULL;
+	int32_t pcm_len = 0;
+	rv = Dm_createHydraSamplesForDls(dls, &pcm, &pcm_len, &hydra.shdrs, &hydra.shdrNum);
+	if (rv != DmResult_SUCCESS) {
+		return rv;
+	}
+
+	// Fill the hydra with useful data
+	uint32_t pgen_ndx = 0;
+	uint32_t pmod_ndx = 0;
+	uint32_t ibag_ndx = 0;
+	uint32_t igen_ndx = 0;
+	uint32_t imod_ndx = 0;
+	for (size_t i = 0; i < dls->instrument_count; ++i) {
+		DmDlsInstrument* ins = &dls->instruments[i];
+		uint32_t bank = ins->bank;
+
+		// Ignore drum kits for now.
+		if (ins->bank & DmDls_DRUM_KIT) {
+			bank = 999;
+		}
+
+		strncpy(hydra.phdrs[i].presetName, ins->info.inam, 19);
+		hydra.phdrs[i].bank = bank;
+		hydra.phdrs[i].preset = ins->patch;
+		hydra.phdrs[i].genre = 0;
+		hydra.phdrs[i].morphology = 0;
+		hydra.phdrs[i].library = 0;
+		hydra.phdrs[i].presetBagNdx = i;
+
+		hydra.pbags[i].genNdx = pgen_ndx;
+		hydra.pbags[i].modNdx = pmod_ndx;
+
+		hydra.pgens[pgen_ndx].genOper = kInstrument;
+		hydra.pgens[pgen_ndx].genAmount.wordAmount = i;
+		pgen_ndx++;
+
+		strncpy(hydra.insts[i].instName, ins->info.inam, 19);
+		hydra.insts[i].instBagNdx = ibag_ndx;
+
+		for (size_t r = 0; r < ins->region_count; ++r) {
+			DmDlsRegion* reg = &ins->regions[r];
+
+			hydra.ibags[ibag_ndx].instGenNdx = igen_ndx;
+			hydra.ibags[ibag_ndx].instModNdx = imod_ndx;
+			ibag_ndx++;
+
+			hydra.igens[igen_ndx].genOper = kKeyRange;
+			hydra.igens[igen_ndx].genAmount.range.hi = (tsf_u8) reg->range_high;
+			hydra.igens[igen_ndx].genAmount.range.lo = (tsf_u8) reg->range_low;
+			igen_ndx++;
+
+			hydra.igens[igen_ndx].genOper = kVelRange;
+			uint8_t vel_hi = reg->velocity_high;
+			uint8_t vel_lo = reg->velocity_low;
+
+			if (vel_hi <= vel_lo) {
+				vel_hi = 127;
+				vel_lo = 0;
+			}
+
+			hydra.igens[igen_ndx].genAmount.range.hi = vel_hi;
+			hydra.igens[igen_ndx].genAmount.range.lo = vel_lo;
+			igen_ndx++;
+
+			hydra.igens[igen_ndx].genOper = kAttackVolEnv;
+			hydra.igens[igen_ndx].genAmount.shortAmount = sf2SecondsToTimeCents(0.1);
+			igen_ndx++;
+
+			hydra.igens[igen_ndx].genOper = kInitialAttenuation;
+			hydra.igens[igen_ndx].genAmount.shortAmount = (tsf_s16) reg->sample.attenuation;
+			igen_ndx++;
+
+			// Articulators
+			for (size_t a = 0; a < ins->articulator_count; ++a) {
+				igen_ndx += DmSynth_insertGeneratorArticulators(hydra.igens + igen_ndx, &ins->articulators[a]);
+			}
+
+			for (size_t a = 0; a < reg->articulator_count; ++a) {
+				igen_ndx += DmSynth_insertGeneratorArticulators(hydra.igens + igen_ndx, &reg->articulators[a]);
+			}
+
+			hydra.igens[igen_ndx].genOper = kSampleModes;
+			hydra.igens[igen_ndx].genAmount.wordAmount = reg->sample.looping == true ? 1 : 0;
+			igen_ndx++;
+
+			hydra.igens[igen_ndx].genOper = kSampleID;
+			hydra.igens[igen_ndx].genAmount.wordAmount = reg->link_table_index;
+			igen_ndx++;
+
+			// Additional sample configuration.
+			// TODO(lmichaelis): Some samples are re-used. Is is okay to change these values for them?
+			struct tsf_hydra_shdr* hdr = &hydra.shdrs[reg->link_table_index];
+			if (reg->sample.looping) {
+				uint32_t offset = hdr->start;
+				hdr->startLoop = offset + reg->sample.loop_start;
+				hdr->endLoop = offset + reg->sample.loop_start + reg->sample.loop_length;
+
+				// NOTE: Fix for sound cutting off too early. When using TSF.
+				if (hdr->endLoop > hdr->end) {
+					hdr->endLoop = hdr->end;
+				}
+			} else {
+				hdr->startLoop = 0;
+				hdr->endLoop = 0;
+			}
+
+			hdr->originalPitch = (tsf_u8) reg->sample.unity_note;
+			hdr->pitchCorrection = (tsf_s8) reg->sample.fine_tune;
+		}
+	}
+
+	// Populate the sentinel values of the hydra
+	strncpy(hydra.phdrs[hydra.phdrNum - 1].presetName, "EOP", 19);
+	hydra.phdrs[hydra.phdrNum - 1].bank = 0;
+	hydra.phdrs[hydra.phdrNum - 1].preset = 0;
+	hydra.phdrs[hydra.phdrNum - 1].genre = 0;
+	hydra.phdrs[hydra.phdrNum - 1].morphology = 0;
+	hydra.phdrs[hydra.phdrNum - 1].library = 0;
+	hydra.phdrs[hydra.phdrNum - 1].presetBagNdx = hydra.pbagNum - 1;
+
+	hydra.pbags[hydra.pbagNum - 1].genNdx = hydra.pgenNum - 1;
+	hydra.pbags[hydra.pbagNum - 1].modNdx = hydra.pmodNum - 1;
+
+	hydra.pgens[hydra.pgenNum - 1].genOper = 0;
+	hydra.pgens[hydra.pgenNum - 1].genAmount.shortAmount = 0;
+
+	hydra.pmods[hydra.pmodNum - 1].modSrcOper = 0;
+	hydra.pmods[hydra.pmodNum - 1].modDestOper = 0;
+	hydra.pmods[hydra.pmodNum - 1].modTransOper = 0;
+	hydra.pmods[hydra.pmodNum - 1].modAmount = 0;
+	hydra.pmods[hydra.pmodNum - 1].modAmtSrcOper = 0;
+
+	strncpy(hydra.insts[hydra.instNum - 1].instName, "EOI", 19);
+	hydra.insts[hydra.instNum - 1].instBagNdx = hydra.ibagNum - 1;
+
+	hydra.ibags[hydra.ibagNum - 1].instGenNdx = hydra.igenNum - 1;
+	hydra.ibags[hydra.ibagNum - 1].instModNdx = hydra.imodNum - 1;
+
+	hydra.igens[hydra.igenNum - 1].genOper = 0;
+	hydra.igens[hydra.igenNum - 1].genAmount.shortAmount = 0;
+
+	hydra.imods[hydra.imodNum - 1].modSrcOper = 0;
+	hydra.imods[hydra.imodNum - 1].modDestOper = 0;
+	hydra.imods[hydra.imodNum - 1].modTransOper = 0;
+	hydra.imods[hydra.imodNum - 1].modAmount = 0;
+	hydra.imods[hydra.imodNum - 1].modAmtSrcOper = 0;
+
+	// Finally, create the tsf
 	tsf* res = *out = Dm_alloc(sizeof(tsf));
 	if (res == NULL) {
 		return DmResult_MEMORY_EXHAUSTED;
 	}
 
-	if (!tsf_load_presets(res, &hydra, (tsf_u32) sample_count)) {
+	if (!tsf_load_presets(res, &hydra, pcm_len)) {
 		Dm_report(DmLogLevel_ERROR, "DmSynth: Failed to load tsf presets");
 		return DmResult_MEMORY_EXHAUSTED;
 	}
 
-	res->outSampleRate = 44100.0F;
-	res->fontSamples = samples;
+	res->fontSamples = pcm;
 
-	if (!tsf_set_max_voices(res, (int) (dls->region_count * 4))) {
-		Dm_report(DmLogLevel_ERROR, "DmSynth: Failed to set tsf voice count");
-		return DmResult_MEMORY_EXHAUSTED;
-	}
-
-	tsf_channel_set_bank_preset(res, 0, 0, 0);
-
-	Dm_free(sample_headers);
-	Dm_free(instrument_zones);
-	Dm_free(instrument_generators);
+	// Lastly, free up all the hydra stuff
+	Dm_free(hydra.phdrs);
+	Dm_free(hydra.pbags);
+	Dm_free(hydra.pgens);
+	Dm_free(hydra.pmods);
+	Dm_free(hydra.insts);
+	Dm_free(hydra.ibags);
+	Dm_free(hydra.igens);
+	Dm_free(hydra.imods);
+	Dm_free(hydra.shdrs);
 
 	return DmResult_SUCCESS;
 }
