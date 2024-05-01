@@ -826,6 +826,8 @@ static void DmPerformance_handleMessage(DmPerformance* slf, DmMessage* msg) {
 		DmSynth_sendControl(&slf->synth, msg->control.channel, msg->control.control, msg->control.value);
 		if (msg->control.reset) {
 			DmSynth_sendControlReset(&slf->synth, msg->control.channel, msg->control.control, msg->control.reset_value);
+		} else {
+			DmSynth_sendControlReset(&slf->synth, msg->control.channel, msg->control.control, msg->control.value);
 		}
 
 		Dm_report(DmLogLevel_TRACE,
