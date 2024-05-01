@@ -103,7 +103,7 @@ DMAPI DmResult Dm_setHeapAllocator(DmMemoryAlloc* alloc, DmMemoryFree* free, voi
 
 /// \brief The set of message levels supported by the logging facilities.
 typedef enum DmLogLevel {
-	/// \brief The log message indicates an fatal error.
+	/// \brief The log message indicates a fatal error.
 	DmLogLevel_FATAL = 10,
 
 	/// \brief The log message indicates an error.
@@ -147,7 +147,7 @@ DMAPI void Dm_setLogger(DmLogLevel lvl, DmLogHandler* log, void* ctx);
 /// \see Dm_setLoggerLevel Function to set the log level on its own.
 DMAPI void Dm_setLoggerDefault(DmLogLevel lvl);
 
-/// \brief Sets the log level of the library.
+/// \brief Set the log level of the library.
 /// \param lvl The log level to set.
 DMAPI void Dm_setLoggerLevel(DmLogLevel lvl);
 
@@ -267,9 +267,8 @@ DMAPI DmResult DmLoader_addResolver(DmLoader* slf, DmLoaderResolverCallback* res
 
 /// \brief Get a segment from the loader's cache or load it by file \p name.
 ///
-/// Gets a segment from the loader's cache if it's enabled (see #DmLoader_CACHE) or loads the segment
-/// using the resolvers added to the loader. If the requested segment is found in neither the loader,
-/// nor by any resolver, an error is issued.
+/// Gets a segment from the loader's cache or loads the segment using the resolvers added to the loader. If the
+/// requested segment is found in neither the loader, nor by any resolver, an error is issued.
 ///
 /// If the loader was created using the #DmLoader_DOWNLOAD option, this function automatically downloads
 /// the segment by calling #DmSegment_download.
@@ -294,15 +293,27 @@ DMAPI DmResult DmLoader_getSegment(DmLoader* slf, char const* name, DmSegment** 
 /// \{
 
 typedef enum DmRenderOptions {
+	/// \brief Render format flag to request rendering of `int16_t` samples
 	DmRender_SHORT = 1 << 0,
+
+	/// \brief Render format flag to request rendering of `float` samples
 	DmRender_FLOAT = 1 << 1,
+
+	/// \brief Render flags to request stereo PCM rendering.
 	DmRender_STEREO = 1 << 2,
 } DmRenderOptions;
 
 typedef enum DmTiming {
+	/// \brief Timing flag indicating start at the next possible tick.
 	DmTiming_INSTANT = 1,
+
+	/// \brief Timing flag indicating start at the next possible grid boundary.
 	DmTiming_GRID = 2,
+
+	/// \brief Timing flag indicating start at the next possible beat boundary.
 	DmTiming_BEAT = 3,
+
+	/// \brief Timing flag indicating start at the next possible measure boundary.
 	DmTiming_MEASURE = 4,
 } DmTiming;
 
@@ -342,7 +353,7 @@ DMAPI void DmPerformance_release(DmPerformance* slf);
 /// \brief Schedule a new segment to be played by the given performance.
 ///
 /// The segment is played at the next timing boundary provided with \p timing. This function simply stops the currently
-/// playing segment and starts playing the next one. To play a transition between the two segment, use
+/// playing segment and starts playing the next one. To play a transition between the two segments, use
 /// #DmPerformance_playTransition.
 ///
 /// \note The segment will always start playing strictly after the last call to #DmPerformance_renderPcm since that

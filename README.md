@@ -72,7 +72,7 @@ int main(int argc, char** argv) {
 	//    music on-demand, so as long as you don't call DmPerformance_renderPcm, you can consider playback to
 	//    be paused. To stop playing music, you can pass NULL as the segment parameter.
 	//
-	//    The second parameter here is the timing. It tells the performance at which boundary to start playing
+	//    The third parameter here is the timing. It tells the performance at which boundary to start playing
 	//    the new segment as to not interrupt the flow of music. The options are "instant", which ignores all
 	//    that and immediately plays the segment, "grid" which plays the segment at the next possible beat
 	//    subdivision, "beat" which plays the segment at the next beat and "measure" which plays it at the next
