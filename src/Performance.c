@@ -29,7 +29,7 @@ DmResult DmPerformance_create(DmPerformance** slf) {
 
 	if (mtx_init(&new->mod_lock, mtx_plain) != thrd_success) {
 		Dm_free(new);
-		return DmResult_INTERNAL_ERROR;
+		return DmResult_MUTEX_ERROR;
 	}
 
 	DmResult rv = DmMessageQueue_init(&new->control_queue);
@@ -127,7 +127,7 @@ DmResult DmPerformance_playSegment(DmPerformance* slf, DmSegment* sgt, DmTiming 
 	msg.segment.loop = 0;
 
 	if (mtx_lock(&slf->mod_lock) != thrd_success) {
-		return DmResult_INTERNAL_ERROR;
+		return DmResult_MUTEX_ERROR;
 	}
 
 	DmMessageQueue_add(&slf->control_queue, &msg, offset, DmQueueConflict_REPLACE);
@@ -883,7 +883,7 @@ DmResult DmPerformance_renderPcm(DmPerformance* slf, void* buf, size_t len, DmRe
 	size_t sample = 0;
 	while (sample < len) {
 		if (mtx_lock(&slf->mod_lock) != thrd_success) {
-			return DmResult_INTERNAL_ERROR;
+			return DmResult_MUTEX_ERROR;
 		}
 
 		bool ok_ctrl = DmMessageQueue_get(&slf->control_queue, &msg_ctrl);

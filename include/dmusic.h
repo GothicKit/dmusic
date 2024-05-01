@@ -43,7 +43,7 @@ typedef enum DmResult {
 	DmResult_MEMORY_EXHAUSTED,
 	DmResult_NOT_FOUND,
 	DmResult_FILE_CORRUPT,
-	DmResult_INTERNAL_ERROR,
+	DmResult_MUTEX_ERROR,
 } DmResult;
 
 typedef struct DmGuid {

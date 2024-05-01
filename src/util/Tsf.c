@@ -377,7 +377,7 @@ DmResult DmSynth_createTsfForInstrument(DmInstrument* slf, tsf** out) {
 
 	if (!tsf_load_presets(res, &hydra, (tsf_u32) sample_count)) {
 		Dm_report(DmLogLevel_ERROR, "DmSynth: Failed to load tsf presets");
-		return DmResult_INTERNAL_ERROR;
+		return DmResult_MEMORY_EXHAUSTED;
 	}
 
 	res->outSampleRate = 44100.0F;
@@ -385,7 +385,7 @@ DmResult DmSynth_createTsfForInstrument(DmInstrument* slf, tsf** out) {
 
 	if (!tsf_set_max_voices(res, (int) (dls->region_count * 4))) {
 		Dm_report(DmLogLevel_ERROR, "DmSynth: Failed to set tsf voice count");
-		return DmResult_INTERNAL_ERROR;
+		return DmResult_MEMORY_EXHAUSTED;
 	}
 
 	tsf_channel_set_bank_preset(res, 0, 0, 0);
