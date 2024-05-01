@@ -358,17 +358,27 @@ typedef union DmMessage {
 
 DmArray_DEFINE(DmMessageList, DmMessage);
 
-typedef struct DmSynthChannel {
+typedef struct DmSynthInstrument {
 	tsf* synth;
+	DmDls* dls;
+
+	uint16_t bank;
+	uint16_t patch;
+
 	float volume;
 	float volume_reset;
 	float pan_reset;
 	int pitch_bend_reset;
-} DmSynthChannel;
+} DmSynthInstrument;
+
+DmArray_DEFINE(DmSynthInstrumentArray, DmSynthInstrument);
 
 typedef struct DmSynth {
 	size_t channel_count;
-	DmSynthChannel* channels;
+	DmSynthInstrument** channels;
+
+	DmSynthInstrumentArray instruments;
+
 	DmBand* band;
 	float volume;
 } DmSynth;

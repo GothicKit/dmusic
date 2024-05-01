@@ -20,18 +20,8 @@ void DmSynth_init(DmSynth* slf) {
 	}
 
 	memset(slf, 0, sizeof *slf);
+	DmSynthInstrumentArray_init(&slf->instruments);
 	slf->volume = 1;
-}
-
-static void DmSynth_freeChannels(DmSynth* slf) {
-	for (size_t i = 0; i < slf->channel_count; ++i) {
-		tsf_close(slf->channels[i].synth);
-	}
-
-	Dm_free(slf->channels);
-
-	slf->channels = NULL;
-	slf->channel_count = 0;
 }
 
 void DmSynth_free(DmSynth* slf) {
@@ -39,7 +29,8 @@ void DmSynth_free(DmSynth* slf) {
 		return;
 	}
 
-	DmSynth_freeChannels(slf);
+	Dm_free(slf->channels);
+	DmSynthInstrumentArray_free(&slf->instruments);
 }
 
 void DmSynth_reset(DmSynth* slf) {
@@ -47,15 +38,111 @@ void DmSynth_reset(DmSynth* slf) {
 		return;
 	}
 
-	for (uint32_t i = 0; i < slf->channel_count; ++i) {
-		if (slf->channels[i].synth == NULL) {
+	for (uint32_t i = 0; i < slf->instruments.length; ++i) {
+		DmSynthInstrument* ins = &slf->instruments.data[i];
+
+		ins->volume = ins->volume_reset;
+		tsf_channel_set_pan(ins->synth, 0, ins->pan_reset);
+		tsf_channel_set_pitchwheel(ins->synth, 0, ins->pitch_bend_reset);
+	}
+}
+
+static DmSynthInstrument* DmSynth_getInstrument(DmSynth* slf, DmInstrument* ins) {
+	for (size_t i = 0; i < slf->instruments.length; ++i) {
+		uint32_t bank = (ins->patch & 0xFF00U) >> 8;
+		uint32_t patch = ins->patch & 0xFFU;
+		if (slf->instruments.data[i].dls == ins->dls_collection && slf->instruments.data[i].bank == bank &&
+		    slf->instruments.data[i].patch == patch) {
+			return &slf->instruments.data[i];
+		}
+	}
+
+	return NULL;
+}
+
+static DmResult DmSynth_loadInstruments(DmSynth* slf, DmBand* band) {
+	DmResult rv = DmResult_SUCCESS;
+	for (size_t i = 0; i < band->instrument_count; ++i) {
+		DmInstrument* ins = &band->instruments[i];
+		if (ins->dls == NULL) {
 			continue;
 		}
 
-		slf->channels[i].volume = slf->channels[i].volume_reset;
-		tsf_channel_set_pan(slf->channels[i].synth, 0, slf->channels[i].pan_reset);
-		tsf_channel_set_pitchwheel(slf->channels[i].synth, 0, slf->channels[i].pitch_bend_reset);
+		DmSynthInstrument* sin = DmSynth_getInstrument(slf, ins);
+
+		// The instrument does not yet exist. Create it anew!
+		if (sin == NULL) {
+			DmSynthInstrument new_ins;
+			rv = DmSynth_createTsfForInstrument(ins, &new_ins.synth);
+			if (rv != DmResult_SUCCESS) {
+				continue;
+			}
+
+			new_ins.bank = (ins->patch & 0xFF00U) >> 8;
+			new_ins.patch = ins->patch & 0xFFU;
+			new_ins.dls = ins->dls_collection;
+
+			rv = DmSynthInstrumentArray_add(&slf->instruments, new_ins);
+			if (rv != DmResult_SUCCESS) {
+				return rv;
+			}
+
+			sin = &slf->instruments.data[slf->instruments.length - 1];
+		}
+
+		// Reset the instrument's properties
+
+		float pan = (ins->flags & DmInstrument_PAN) ? (float) ins->pan / DmInt_MIDI_MAX : DmInt_PAN_CENTER;
+		float vol = (ins->flags & DmInstrument_VOLUME) ? (float) ins->volume / DmInt_MIDI_MAX : DmInt_VOLUME_MAX;
+
+		(void) tsf_channel_set_pan(sin->synth, 0, pan);
+		sin->pitch_bend_reset = DmInt_PITCH_BEND_NEUTRAL;
+		sin->volume = vol;
+		sin->volume_reset = vol;
+		sin->pan_reset = pan;
 	}
+
+	return rv;
+}
+
+static DmResult DmSynth_assignInstrumentChannels(DmSynth* slf, DmBand* band) {
+	// Calculate the number of required performance channels
+	size_t channel_count = 0;
+	for (size_t i = 0; i < band->instrument_count; ++i) {
+		channel_count = max_usize(band->instruments[i].channel, channel_count);
+	}
+	channel_count += 1;
+
+	// Increase the size of the channel array (if required)
+	if (channel_count > slf->channel_count) {
+		DmSynthInstrument** new_channels = Dm_alloc(sizeof(DmSynthInstrument*) * channel_count);
+		if (new_channels == NULL) {
+			return DmResult_MEMORY_EXHAUSTED;
+		}
+
+		if (slf->channels != NULL) {
+			memcpy(new_channels, slf->channels, sizeof(DmSynthInstrument*) * slf->channel_count);
+			Dm_free(slf->channels);
+		}
+
+		slf->channels = new_channels;
+		slf->channel_count = channel_count;
+	}
+
+	// Clear existing channels.
+	memset(slf->channels, 0, sizeof(DmSynthInstrument*) * slf->channel_count);
+
+	// Assign the instrument to each channel.
+	for (size_t i = 0; i < band->instrument_count; ++i) {
+		DmInstrument* ins = &band->instruments[i];
+		if (ins->dls == NULL) {
+			continue;
+		}
+
+		slf->channels[ins->channel] = DmSynth_getInstrument(slf, ins);
+	}
+
+	return DmResult_SUCCESS;
 }
 
 // TODO(lmichaelis): Technically, we should change as little as possible to accommodate the new band.
@@ -67,68 +154,14 @@ void DmSynth_sendBandUpdate(DmSynth* slf, DmBand* band) {
 		return;
 	}
 
-	// Optimization: Don't re-alloc the entire thing if we're getting the same band
-	// TODO(lmichaelis): This is a stop-gap solution to prevent audio flicker when replacing TSFs. It
-	//                   only works if all band instruments are in the same order and use the same DLS.
-	//                   When switching between actual bands, this will break!
-	if (DmBand_isSortOfSameAs(slf->band, band)) {
-		for (size_t i = 0; i < band->instrument_count; ++i) {
-			DmInstrument* ins = &band->instruments[i];
-			if (slf->channels[ins->channel].synth == NULL) {
-				continue;
-			}
-
-			float pan = (ins->flags & DmInstrument_PAN) ? (float) ins->pan / DmInt_MIDI_MAX : DmInt_PAN_CENTER;
-			float vol = (ins->flags & DmInstrument_VOLUME) ? (float) ins->volume / DmInt_MIDI_MAX : DmInt_VOLUME_MAX;
-
-			bool res = tsf_channel_set_pan(slf->channels[ins->channel].synth, 0, pan);
-			if (!res) {
-				Dm_report(DmLogLevel_ERROR, "DmSynth: tsf_channel_set_pan encountered an error.");
-			}
-
-			slf->channels[ins->channel].pitch_bend_reset = DmInt_PITCH_BEND_NEUTRAL;
-			slf->channels[ins->channel].volume = vol;
-			slf->channels[ins->channel].volume_reset = vol;
-			slf->channels[ins->channel].pan_reset = pan;
-		}
+	DmResult rv = DmSynth_loadInstruments(slf, band);
+	if (rv != DmResult_SUCCESS) {
 		return;
 	}
 
-	slf->band = band;
-	DmSynth_freeChannels(slf);
-
-	// Calculate the number of required performance channels
-	for (size_t i = 0; i < band->instrument_count; ++i) {
-		slf->channel_count = max_usize(band->instruments[i].channel, slf->channel_count);
-	}
-
-	// Allocate all synths
-	slf->channel_count += 1;
-	slf->channels = Dm_alloc(sizeof(DmSynthChannel) * slf->channel_count);
-
-	for (size_t i = 0; i < band->instrument_count; ++i) {
-		DmInstrument* ins = &band->instruments[i];
-
-		tsf* t = NULL;
-		DmResult rv = DmSynth_createTsfForInstrument(ins, &t);
-		if (rv != DmResult_SUCCESS) {
-			slf->channels[ins->channel].synth = NULL;
-			continue;
-		}
-
-		float pan = (ins->flags & DmInstrument_PAN) ? (float) ins->pan / DmInt_MIDI_MAX : DmInt_PAN_CENTER;
-		float vol = (ins->flags & DmInstrument_VOLUME) ? (float) ins->volume / DmInt_MIDI_MAX : DmInt_VOLUME_MAX;
-
-		bool res = tsf_channel_set_pan(t, 0, pan);
-		if (!res) {
-			Dm_report(DmLogLevel_ERROR, "DmSynth: tsf_channel_set_pan encountered an error.");
-		}
-
-		slf->channels[ins->channel].synth = t;
-		slf->channels[ins->channel].pitch_bend_reset = DmInt_PITCH_BEND_NEUTRAL;
-		slf->channels[ins->channel].volume = vol;
-		slf->channels[ins->channel].volume_reset = vol;
-		slf->channels[ins->channel].pan_reset = pan;
+	rv = DmSynth_assignInstrumentChannels(slf, band);
+	if (rv != DmResult_SUCCESS) {
+		return;
 	}
 }
 
@@ -137,14 +170,14 @@ void DmSynth_sendControl(DmSynth* slf, uint32_t channel, uint8_t control, float 
 		return;
 	}
 
-	if (slf->channels[channel].synth == NULL) {
+	if (slf->channels[channel] == NULL) {
 		return;
 	}
 
 	if (control == DmInt_MIDI_CC_VOLUME || control == DmInt_MIDI_CC_EXPRESSION) {
-		slf->channels[channel].volume = value;
+		slf->channels[channel]->volume = value;
 	} else if (control == DmInt_MIDI_CC_PAN) {
-		tsf_channel_set_pan(slf->channels[channel].synth, 0, value);
+		tsf_channel_set_pan(slf->channels[channel]->synth, 0, value);
 	} else {
 		Dm_report(DmLogLevel_WARN, "DmSynth: Control change %d is unknown.", control);
 	}
@@ -155,14 +188,14 @@ void DmSynth_sendControlReset(DmSynth* slf, uint32_t channel, uint8_t control, f
 		return;
 	}
 
-	if (slf->channels[channel].synth == NULL) {
+	if (slf->channels[channel] == NULL) {
 		return;
 	}
 
 	if (control == DmInt_MIDI_CC_VOLUME || control == DmInt_MIDI_CC_EXPRESSION) {
-		slf->channels[channel].volume_reset = reset;
+		slf->channels[channel]->volume_reset = reset;
 	} else if (control == DmInt_MIDI_CC_PAN) {
-		slf->channels[channel].pan_reset = reset;
+		slf->channels[channel]->pan_reset = reset;
 	} else {
 		Dm_report(DmLogLevel_WARN, "DmSynth: Control change %d is unknown.", control);
 	}
@@ -173,11 +206,11 @@ void DmSynth_sendPitchBend(DmSynth* slf, uint32_t channel, int bend) {
 		return;
 	}
 
-	if (slf->channels[channel].synth == NULL) {
+	if (slf->channels[channel] == NULL) {
 		return;
 	}
 
-	tsf_channel_set_pitchwheel(slf->channels[channel].synth, 0, bend);
+	tsf_channel_set_pitchwheel(slf->channels[channel]->synth, 0, bend);
 }
 
 void DmSynth_sendPitchBendReset(DmSynth* slf, uint32_t channel, int reset) {
@@ -185,11 +218,11 @@ void DmSynth_sendPitchBendReset(DmSynth* slf, uint32_t channel, int reset) {
 		return;
 	}
 
-	if (slf->channels[channel].synth == NULL) {
+	if (slf->channels[channel] == NULL) {
 		return;
 	}
 
-	slf->channels[channel].pitch_bend_reset = reset;
+	slf->channels[channel]->pitch_bend_reset = reset;
 }
 
 void DmSynth_sendNoteOn(DmSynth* slf, uint32_t channel, uint8_t note, uint8_t velocity) {
@@ -197,11 +230,11 @@ void DmSynth_sendNoteOn(DmSynth* slf, uint32_t channel, uint8_t note, uint8_t ve
 		return;
 	}
 
-	if (slf->channels[channel].synth == NULL) {
+	if (slf->channels[channel] == NULL) {
 		return;
 	}
 
-	bool res = tsf_channel_note_on(slf->channels[channel].synth, 0, note, (float) velocity / DmInt_MIDI_MAX);
+	bool res = tsf_channel_note_on(slf->channels[channel]->synth, 0, note, (float) velocity / DmInt_MIDI_MAX);
 	if (!res) {
 		Dm_report(DmLogLevel_ERROR, "DmSynth: DmSynth_sendNoteOn encountered an error.");
 	}
@@ -212,11 +245,11 @@ void DmSynth_sendNoteOff(DmSynth* slf, uint32_t channel, uint8_t note) {
 		return;
 	}
 
-	if (slf->channels[channel].synth == NULL) {
+	if (slf->channels[channel] == NULL) {
 		return;
 	}
 
-	tsf_note_off(slf->channels[channel].synth, 0, note);
+	tsf_note_off(slf->channels[channel]->synth, 0, note);
 }
 
 void DmSynth_sendNoteOffAll(DmSynth* slf, uint32_t channel) {
@@ -224,11 +257,11 @@ void DmSynth_sendNoteOffAll(DmSynth* slf, uint32_t channel) {
 		return;
 	}
 
-	if (slf->channels[channel].synth == NULL) {
+	if (slf->channels[channel] == NULL) {
 		return;
 	}
 
-	tsf_channel_note_off_all(slf->channels[channel].synth, 0);
+	tsf_channel_note_off_all(slf->channels[channel]->synth, 0);
 }
 
 void DmSynth_sendNoteOffEverything(DmSynth* slf) {
@@ -237,7 +270,7 @@ void DmSynth_sendNoteOffEverything(DmSynth* slf) {
 	}
 
 	for (uint32_t i = 0; i < slf->channel_count; ++i) {
-		if (slf->channels[i].synth == NULL) {
+		if (slf->channels[i] == NULL) {
 			continue;
 		}
 
@@ -254,25 +287,22 @@ void DmSynth_setVolume(DmSynth* slf, float vol) {
 }
 
 size_t DmSynth_render(DmSynth* slf, void* buf, size_t len, DmRenderOptions fmt) {
-	for (size_t i = 0; i < slf->channel_count; ++i) {
-		if (slf->channels[i].synth == NULL) {
-			continue;
-		}
+	for (size_t i = 0; i < slf->instruments.length; ++i) {
+		DmSynthInstrument* ins = &slf->instruments.data[i];
 
 		int channels = (fmt & DmRender_STEREO) ? 2 : 1;
 		if (fmt & DmRender_STEREO) {
-			tsf_set_output(slf->channels[i].synth, TSF_STEREO_INTERLEAVED, 44100, 0);
+			tsf_set_output(ins->synth, TSF_STEREO_INTERLEAVED, 44100, 0);
 		} else {
-			tsf_set_output(slf->channels[i].synth, TSF_MONO, 44100, 0);
+			tsf_set_output(ins->synth, TSF_MONO, 44100, 0);
 		}
 
-		float vol = slf->channels[i].volume ;
-		vol *= slf->volume;
+		float vol = ins->volume * slf->volume;
 
 		if (fmt & DmRender_FLOAT) {
-			tsf_render_float(slf->channels[i].synth, buf, (int) len / channels, i != 0, vol);
+			tsf_render_float(ins->synth, buf, (int) len / channels, i != 0, vol);
 		} else {
-			tsf_render_short(slf->channels[i].synth, buf, (int) len / channels, i != 0, vol);
+			tsf_render_short(ins->synth, buf, (int) len / channels, i != 0, vol);
 		}
 	}
 
