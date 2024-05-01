@@ -4,6 +4,7 @@ project(dmusic LANGUAGES C VERSION 0.0.1)
 set(CMAKE_C_STANDARD 11)
 
 option(DM_ENABLE_ASAN "DirectMusic: Enable sanitizers in debug builds." ON)
+option(DM_BUILD_EXAMPLES "DirectMusic: Build the examples." OFF)
 
 add_subdirectory(vendor)
 
@@ -64,3 +65,7 @@ set_target_properties(dmusic PROPERTIES
 
 install(TARGETS dmusic ARCHIVE LIBRARY RUNTIME)
 install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/include" TYPE INCLUDE)
+
+if (DM_BUILD_EXAMPLES)
+    add_subdirectory(examples)
+endif ()
