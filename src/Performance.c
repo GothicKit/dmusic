@@ -889,6 +889,7 @@ DmResult DmPerformance_renderPcm(DmPerformance* slf, void* buf, size_t len, DmRe
 
 		if (!ok_ctrl && !ok_midi) {
 			// No more messages to process.
+			(void) mtx_unlock(&slf->mod_lock);
 			break;
 		}
 
