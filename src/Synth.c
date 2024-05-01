@@ -54,7 +54,7 @@ static DmSynthInstrument* DmSynth_getInstrument(DmSynth* slf, DmInstrument* ins)
 		uint32_t bank = (ins->patch & 0xFF00U) >> 8;
 		uint32_t patch = ins->patch & 0xFFU;
 		if (slf->instruments.data[i].dls == ins->dls && slf->instruments.data[i].bank == bank &&
-		    slf->instruments.data[i].patch == patch && slf->instruments.data[i].channel == ins->channel) {
+		    slf->instruments.data[i].patch == patch) {
 			return &slf->instruments.data[i];
 		}
 	}
@@ -88,7 +88,6 @@ static DmResult DmSynth_updateInstruments(DmSynth* slf, DmBand* band) {
 			new_ins.volume_reset = DmInt_VOLUME_MAX;
 			new_ins.pan_reset = DmInt_PAN_CENTER;
 			new_ins.transpose = 0;
-			new_ins.channel = ins->channel;
 
 			rv = DmSynthInstrumentArray_add(&slf->instruments, new_ins);
 			if (rv != DmResult_SUCCESS) {
@@ -100,8 +99,8 @@ static DmResult DmSynth_updateInstruments(DmSynth* slf, DmBand* band) {
 
 		// Set the instrument's properties
 		if (ins->options & DmInstrument_VALID_PAN) {
-			tsf_channel_set_pan(sin->synth, 0, ins->pan);
-			sin->pan_reset = ins->pan;
+			tsf_channel_set_pan(sin->synth, 0, (float) ins->pan / (float) DmInt_MIDI_MAX);
+			sin->pan_reset = (float) ins->pan / (float) DmInt_MIDI_MAX;
 		}
 
 		if (ins->options & DmInstrument_VALID_VOLUME) {
