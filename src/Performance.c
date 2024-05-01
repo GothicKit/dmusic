@@ -6,9 +6,10 @@
 
 enum {
 	DmInt_DEFAULT_TEMPO = 100,
+	DmInt_DEFAULT_SAMPLE_RATE = 44100,
 };
 
-DmResult DmPerformance_create(DmPerformance** slf) {
+DmResult DmPerformance_create(DmPerformance** slf, uint32_t rate) {
 	if (slf == NULL) {
 		return DmResult_INVALID_ARGUMENT;
 	}
@@ -18,6 +19,7 @@ DmResult DmPerformance_create(DmPerformance** slf) {
 		return DmResult_MEMORY_EXHAUSTED;
 	}
 
+	new->sample_rate = rate == 0 ? DmInt_DEFAULT_SAMPLE_RATE : rate;
 	new->reference_count = 1;
 	new->tempo = DmInt_DEFAULT_TEMPO;
 	new->groove = 1;
@@ -25,7 +27,7 @@ DmResult DmPerformance_create(DmPerformance** slf) {
 	new->time_signature.beat = 4;
 	new->time_signature.grids_per_beat = 2;
 
-	DmSynth_init(&new->synth);
+	DmSynth_init(&new->synth, new->sample_rate);
 
 	if (mtx_init(&new->mod_lock, mtx_plain) != thrd_success) {
 		Dm_free(new);
@@ -114,7 +116,7 @@ DmResult DmPerformance_playSegment(DmPerformance* slf, DmSegment* sgt, DmTiming 
 	}
 
 	if (sgt != NULL && !sgt->downloaded) {
-		Dm_report(DmLogLevel_ERROR, "DmPerformance: You must download the segment before play it");
+		Dm_report(DmLogLevel_ERROR, "DmPerformance: You must download the segment before playing it");
 		return DmResult_INVALID_ARGUMENT;
 	}
 
@@ -467,12 +469,12 @@ static void DmPerformance_playPattern(DmPerformance* slf, DmPattern* pttn) {
 		// with the same lock ID. Otherwise, we play a variation according to the settings.
 		int32_t variation = variation_lock[pref->variation_lock_id];
 		if (pref->variation_lock_id == 0 || variation < 0) {
-			if (pref->random_variation == 0) {
+			if (pref->random_variation == DmVariation_SEQUENTIAL) {
 				// This pattern is supposed to play its variations in sequence
 				// TODO(lmichaelis): This global counter is probably not correct. Replace it with one specific for each
 				// pattern
 				variation = (int32_t) slf->variation;
-			} else if (pref->random_variation == 1) {
+			} else if (pref->random_variation == DmVariation_RANDOM) {
 				// This pattern is supposed to play its variations in a random order
 				variation = rand();
 			} else {
@@ -874,8 +876,11 @@ DmResult DmPerformance_renderPcm(DmPerformance* slf, void* buf, size_t len, DmRe
 		return DmResult_INVALID_ARGUMENT;
 	}
 
+	if ((opts & DmRender_STEREO) && (len % 2 != 0)) {
+		return DmResult_INVALID_ARGUMENT;
+	}
+
 	uint8_t const channels = opts & DmRender_STEREO ? 2 : 1;
-	uint32_t const sample_rate = 44100;
 
 	DmMessage msg_ctrl;
 	DmMessage msg_midi;
@@ -909,7 +914,7 @@ DmResult DmPerformance_renderPcm(DmPerformance* slf, void* buf, size_t len, DmRe
 
 		DmMessage* msg = ok_ctrl ? &msg_ctrl : &msg_midi;
 		uint32_t time_offset = (uint32_t) max_s32((int) msg->time - (int) slf->time, 0);
-		uint32_t offset_samples = DmPerformance_getSampleCountFromDuration(slf, time_offset, sample_rate, channels);
+		uint32_t offset_samples = DmPerformance_getSampleCountFromDuration(slf, time_offset, slf->sample_rate, channels);
 
 		if (offset_samples > len - sample) {
 			// The next message does not fall into this render call (i.e. it happens after the number of
@@ -925,7 +930,7 @@ DmResult DmPerformance_renderPcm(DmPerformance* slf, void* buf, size_t len, DmRe
 		// same number of samples for each channel.
 		if ((opts & DmRender_STEREO)) {
 			offset_samples += offset_samples % 2;
-			time_offset = DmPerformance_getDurationFromSampleCount(slf, offset_samples, sample_rate, channels);
+			time_offset = DmPerformance_getDurationFromSampleCount(slf, offset_samples, slf->sample_rate, channels);
 		}
 
 		// Render the samples from now until the message occurs and advance the buffer pointer
@@ -952,7 +957,7 @@ DmResult DmPerformance_renderPcm(DmPerformance* slf, void* buf, size_t len, DmRe
 	// Render the remaining samples
 	uint32_t remaining_samples = (uint32_t) (len - sample);
 	(void) DmSynth_render(&slf->synth, buf, remaining_samples, opts);
-	slf->time += DmPerformance_getDurationFromSampleCount(slf, remaining_samples, sample_rate, channels);
+	slf->time += DmPerformance_getDurationFromSampleCount(slf, remaining_samples, slf->sample_rate, channels);
 
 	return DmResult_SUCCESS;
 }

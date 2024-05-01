@@ -35,7 +35,7 @@ void DmBand_release(DmBand* slf) {
 		return;
 	}
 
-	for (size_t i = 0; i < slf->instrument_count; ++i) {
+	for (size_t i = 0; i < slf->instruments_len; ++i) {
 		DmInstrument_free(&slf->instruments[i]);
 	}
 
@@ -82,7 +82,7 @@ DmResult DmBand_download(DmBand* slf, DmLoader* loader) {
 	Dm_report(DmLogLevel_INFO, "DmBand: Downloading instruments for band '%s'", slf->info.unam);
 
 	DmResult rv = DmResult_SUCCESS;
-	for (size_t i = 0; i < slf->instrument_count; ++i) {
+	for (size_t i = 0; i < slf->instruments_len; ++i) {
 		DmInstrument* instrument = &slf->instruments[i];
 
 		// The DLS has already been downloaded. We don't need to do it again.
@@ -92,29 +92,34 @@ DmResult DmBand_download(DmBand* slf, DmLoader* loader) {
 
 		// If the patch is not valid, this instrument cannot be played since we don't know
 		// where to find it in the DLS collection.
-		if (!(instrument->flags & DmInstrument_PATCH)) {
+		if (!(instrument->options & (DmInstrument_VALID_PATCH | DmInstrument_VALID_BANKSELECT))) {
 			Dm_report(DmLogLevel_DEBUG,
 			          "DmBand: Not downloading instrument '%s' without valid patch",
 			          instrument->reference.name);
 			continue;
 		}
 
-		// TODO(lmichaelis): The General MIDI and Roland GS collections are not supported.
-		if (instrument->flags & (DmInstrument_GS | DmInstrument_GM)) {
+		// TODO(lmichaelis): The General MIDI, Roland GS and Yamaha XG collections are not supported.
+		if (instrument->options & DmInstrument_PREDEFINED_COLLECTION) {
 			Dm_report(DmLogLevel_INFO,
-			          "DmBand: Cannot download instrument '%s': GS and GM collections not available",
+			          "DmBand: Cannot download instrument '%s': GM, GS and XG collections not available",
 			          instrument->reference.name);
 			continue;
 		}
 
 		rv = DmLoader_getDownloadableSound(loader, &instrument->reference, &instrument->dls);
 		if (rv != DmResult_SUCCESS || instrument->dls == NULL) {
-			break;
+			continue;
+		}
+
+		DmDlsInstrument* dls_instrument = DmInstrument_getDlsInstrument(instrument);
+		if (dls_instrument == NULL) {
+			continue;
 		}
 
 		Dm_report(DmLogLevel_DEBUG,
 		          "DmBand: DLS instrument '%s' assigned to channel %d for band '%s'",
-		          instrument->dls->info.inam,
+		          dls_instrument->info.inam,
 		          instrument->channel,
 		          slf->info.unam);
 	}

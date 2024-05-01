@@ -11,7 +11,10 @@ static void DmStyle_parsePartReference(DmPartReference* slf, DmRiff* rif) {
 			DmRiff_readByte(&cnk, &slf->variation_lock_id);
 			DmRiff_readByte(&cnk, &slf->subchord_level);
 			DmRiff_readByte(&cnk, &slf->priority);
-			DmRiff_readByte(&cnk, &slf->random_variation);
+
+			uint8_t variation = DmVariation_SEQUENTIAL;
+			DmRiff_readByte(&cnk, &variation);
+			slf->random_variation = variation;
 		} else if (DmRiff_is(&cnk, DM_FOURCC_LIST, DM_FOURCC_UNFO)) {
 			DmUnfo_parse(&slf->info, &cnk);
 		}

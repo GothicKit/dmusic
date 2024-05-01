@@ -202,37 +202,35 @@ static DmMessageQueueItem* DmMessageQueue_getAt(DmMessageQueue* slf, size_t time
 	return NULL;
 }
 
-void DmMessageQueue_add(DmMessageQueue* slf, DmMessage* msg, uint32_t time, DmQueueConflictResolution cr) {
+DmResult DmMessageQueue_add(DmMessageQueue* slf, DmMessage* msg, uint32_t time, DmQueueConflictResolution cr) {
 	if (slf == NULL || msg == NULL) {
-		return;
+		return DmResult_INVALID_ARGUMENT;
 	}
 
 	if (cr != DmQueueConflict_APPEND) {
 		DmMessageQueueItem* itm = DmMessageQueue_getAt(slf, time, msg->type);
 		if (itm != NULL) {
 			if (cr == DmQueueConflict_KEEP) {
-				return;
+				return DmResult_SUCCESS;
 			}
-
-			// else: REPLACE
 
 			DmMessage_free(&itm->data);
 			DmMessage_copy(msg, &itm->data, time);
-			return;
+			return DmResult_SUCCESS;
 		}
 	}
 
 	if (slf->queue_capacity == slf->queue_length) {
 		DmResult rv = DmMessageQueue_growQueue(slf);
 		if (rv != DmResult_SUCCESS) {
-			return;
+			return rv;
 		}
 	}
 
 	if (slf->free == NULL) {
 		DmResult rv = DmMessageQueue_growBlocks(slf);
 		if (rv != DmResult_SUCCESS) {
-			return;
+			return rv;
 		}
 	}
 
@@ -244,6 +242,7 @@ void DmMessageQueue_add(DmMessageQueue* slf, DmMessage* msg, uint32_t time, DmQu
 
 	slf->queue[slf->queue_length++] = itm;
 	DmMessageQueue_heapInsert(slf);
+	return DmResult_SUCCESS;
 }
 
 bool DmMessageQueue_get(DmMessageQueue* slf, DmMessage* msg) {

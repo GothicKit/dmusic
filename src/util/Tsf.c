@@ -81,7 +81,7 @@ static size_t DmSynth_convertGeneratorArticulators(struct tsf_hydra_igen* gens, 
 			gen->genOper = kReleaseModEnv;
 			gen->genAmount.shortAmount = sf2SecondsToTimeCents(dlsTimeCentsToSeconds(con->scale));
 			break;
-		case DmDlsArticulatorDestination_EG1_SUSTAIN_LEVEL:
+		case DmDlsArticulatorDestination_EG1_SUSTAIN_LEVEL: {
 			// SF2 Spec:
 			//     This is the decrease in level, expressed in centibels, to which the Volume Envelope
 			//     value ramps during the decay phase. For the Volume Envelope, the sustain level is
@@ -92,11 +92,14 @@ static size_t DmSynth_convertGeneratorArticulators(struct tsf_hydra_igen* gens, 
 			//     attenuation. For example, a sustain level which corresponds to an absolute value
 			//     12dB below of peak would be 120.
 			//
-			// Thus, since the DLS value in in 0.1% steps and 100 indicates "no attenuation", we can simply
+			// Thus, since the DLS value is in 0.1% steps and 100% indicates "no attenuation", we can simply
 			// convert the DLS value into percent and set the SF2 sustainVolEnv to `1000 * (1 - dls)`.
+			int16_t clamped = (int16_t) clamp_s32(con->scale, 0, 1000);
+
 			gen->genOper = kSustainVolEnv;
-			gen->genAmount.shortAmount = (tsf_s16) (1000. * (1. - (0.1 * con->scale)));
+			gen->genAmount.shortAmount = (tsf_s16) (1000.f * (1.f - (clamped / 1000.f)));
 			break;
+		}
 		case DmDlsArticulatorDestination_EG2_SUSTAIN_LEVEL: {
 			// SF2 Spec:
 			//     This is the decrease in level, expressed in 0.1% units, to which the Modulation
@@ -111,15 +114,10 @@ static size_t DmSynth_convertGeneratorArticulators(struct tsf_hydra_igen* gens, 
 			//     peak would be 600.
 			//
 			// Thus, we just need to invert the DLS value.
-			int32_t clamped = con->scale;
-			if (clamped < 0) {
-				clamped = 0;
-			} else if (clamped > 1000) {
-				clamped = 1000;
-			}
+			int16_t clamped = (int16_t) clamp_s32(con->scale, 0, 1000);
 
 			gen->genOper = kSustainModEnv;
-			gen->genAmount.shortAmount = ((tsf_s16) (1000 - clamped));
+			gen->genAmount.shortAmount = 1000 - clamped;
 			break;
 		}
 		case DmDlsArticulatorDestination_FILTER_CUTOFF:

@@ -72,43 +72,121 @@ struct DmLoader {
 };
 
 typedef enum DmInstrumentFlags {
-	DmInstrument_PATCH = (1 << 0),
-	DmInstrument_BANK_SELECT = (1 << 1),
-	DmInstrument_ASSIGN_PATCH = (1 << 3),
-	DmInstrument_NOTE_RANGES = (1 << 4),
-	DmInstrument_PAN = (1 << 5),
-	DmInstrument_VOLUME = (1 << 6),
-	DmInstrument_TRANSPOSE = (1 << 7),
-	DmInstrument_GM = (1 << 8),
-	DmInstrument_GS = (1 << 9),
-	DmInstrument_XG = (1 << 10),
-	DmInstrument_CHANNEL_PRIORITY = (1 << 11),
+	/// \brief The `patch` member is valid
+	DmInstrument_VALID_PATCH = (1 << 0),
+
+	/// \brief The `patch` member contains a valid bank and preset select
+	DmInstrument_VALID_BANKSELECT = (1 << 1),
+
+	/// \brief The `assign_patch` member is valid
+	DmInstrument_VALID_ASSIGN_PATCH = (1 << 3),
+
+	/// \brief The `note_ranges` member is valid
+	DmInstrument_VALID_NOTE_RANGES = (1 << 4),
+
+	/// \brief The `pan` member is valid
+	DmInstrument_VALID_PAN = (1 << 5),
+
+	/// \brief The `volume` member is valid
+	DmInstrument_VALID_VOLUME = (1 << 6),
+
+	/// \brief The `transpose` member is valid
+	DmInstrument_VALID_TRANSPOSE = (1 << 7),
+
+	/// \brief The `channel_priority` member is valid
+	DmInstrument_VALID_CHANNEL_PRIORITY = (1 << 11),
+
+	/// \brief The instrument is from the General MIDI collection
+	DmInstrument_GENERAL_MIDI = (1 << 8),
+
+	/// \brief The instrument is from the Roland GS collection
+	DmInstrument_ROLAND_GS = (1 << 9),
+
+	/// \brief The instrument is from the Yamaha XG collection
+	DmInstrument_YAMAHA_XG = (1 << 10),
+
+	/// \brief The instrument is from any of the predefined collections
+	DmInstrument_PREDEFINED_COLLECTION = DmInstrument_GENERAL_MIDI | DmInstrument_ROLAND_GS | DmInstrument_YAMAHA_XG,
 	DmInstrument_USE_DEFAULT_GM_SET = (1 << 12),
-} DmInstrumentFlags;
+} DmInstrumentOptions;
 
 typedef struct DmInstrument {
+	/// \brief The bank and patch number of the instrument in the referenced DLS file.
+	/// \note Original name: `dwPatch`
+	/// \see #reference
 	uint32_t patch;
+
 	uint32_t assign_patch;
 	uint32_t note_ranges[4];
+
+	/// \brief The performance channel the instrument plays on.
+	/// \note Original name: `dwPChannel`
 	uint32_t channel;
-	DmInstrumentFlags flags;
+
+	/// \brief Flag set identifying valid fields and general options of the instrument.
+	///
+	/// Before using the value of any field of the instrument (except #reference and #dls), check this
+	/// field identifying whether each member is valid.
+	///
+	/// \note Original name: `dwFlags`
+	DmInstrumentOptions options;
+
+	/// \brief The left-right pan of the instrument.
+	///
+	/// The valid range for this field is 0-127 where 0 indicates full left pan and 127 indicates full right pan.
+	/// The value range constrained is enforced upon parsing.
+	///
+	/// \note Original name: `bPan`
 	uint8_t pan;
+
+	/// \brief The volume of the instrument.
+	///
+	/// The valid range for this field is 0-127 where 0 indicates silence and 127 indicates maximum volume.
+	/// The value range constrained is enforced upon parsing.
+	///
+	/// \note Original name: `bVolume`
 	uint8_t volume;
+
+	/// \brief The number of semitones to transpose all notes played by the instrument by.
+	/// \note Original name: `nTranspose`
 	int16_t transpose;
+
+	/// \brief The priority of the instrument over other instruments if no additional
+	///        voices can be allocated by the synthesizer.
+	///
+	/// > The number of notes that can be played simultaneously is limited by the number of voices available on the port.
+	///   A voice is a set of resources dedicated to the synthesis of a single note or waveform being played on a
+	///   channel. In the event that more notes are playing than there are available voices, one or more notes must
+	///   be suppressed by the synthesizer. The choice is determined by the priority of the voice currently playing the
+	///   note, which is based on the priority of the channel. By default, channels are ranked according to their index
+	///   value, except that channel 10, the MIDI percussion channel, is ranked highest.
+	/// _— Microsoft DirectX Documentation (https://documentation.help/DirectMusic/channels.htm)_
+	///
+	/// \note Original name: `dwChannelPriority`
 	uint32_t channel_priority;
+
 	DmReference reference;
 
 	/// \brief A pointer to a loaded DLS file containing the instrument samples.
 	DmDls* dls;
 } DmInstrument;
 
+/// \brief A DirectMusic band containing a set of instruments to use for playing MIDI notes.
 typedef struct DmBand {
 	_Atomic size_t reference_count;
 
+	/// \brief The GUID uniquely identifying the band.
 	DmGuid guid;
+
+	/// \brief Human-readable information about the band.
 	DmUnfo info;
 
-	size_t instrument_count;
+	/// \brief The number of instruments available in the band.
+	/// \see #instruments
+	size_t instruments_len;
+
+	/// \brief The list of instruments available in the band.
+	/// \see #instruments_len
 	DmInstrument* instruments;
 } DmBand;
 
@@ -188,6 +266,23 @@ typedef struct DmPart {
 	DmCurve* curves;
 } DmPart;
 
+typedef enum DmVariationType {
+	/// \brief Play matching variations sequentially, in the order loaded, starting with the first.
+	DmVariation_SEQUENTIAL = 0,
+
+	/// \brief Select a random matching variation.
+	DmVariation_RANDOM = 1,
+
+	/// \brief Play matching variations sequentially, in the order loaded, starting at a random point in the sequence.
+	DmVariation_RANDOM_START = 2,
+
+	/// \brief Play randomly, but do not play the same variation twice.
+	DmVariation_NO_REPEAT = 3,
+
+	/// \brief Play randomly, but do not repeat any variation until all have played.
+	DmVariation_RANDOM_ROW = 3,
+} DmVariationType;
+
 typedef struct DmPartReference {
 	DmGuid part_id;
 	DmUnfo info;
@@ -196,7 +291,7 @@ typedef struct DmPartReference {
 	uint8_t variation_lock_id;
 	uint8_t subchord_level;
 	uint8_t priority;
-	uint8_t random_variation;
+	DmVariationType random_variation;
 } DmPartReference;
 
 DmArray_DEFINE(DmPartReferenceList, DmPartReference);
@@ -364,11 +459,13 @@ typedef struct DmSynthInstrument {
 
 	uint16_t bank;
 	uint16_t patch;
+	uint32_t channel;
 
 	float volume;
 	float volume_reset;
 	float pan_reset;
 	int pitch_bend_reset;
+	int16_t transpose;
 } DmSynthInstrument;
 
 DmArray_DEFINE(DmSynthInstrumentArray, DmSynthInstrument);
@@ -380,6 +477,7 @@ typedef struct DmSynth {
 	DmSynthInstrumentArray instruments;
 
 	DmBand* band;
+	uint32_t sample_rate;
 	float volume;
 } DmSynth;
 
@@ -450,6 +548,7 @@ struct DmPerformance {
 	DmBand* band;
 	DmSynth synth;
 
+	uint32_t sample_rate;
 	uint32_t variation;
 	uint32_t time;
 	uint8_t groove;
@@ -468,6 +567,8 @@ DMINT void Dm_report(DmLogLevel lvl, char const* fmt, ...);
 
 DMINT size_t max_usize(size_t a, size_t b);
 DMINT int32_t max_s32(int32_t a, int32_t b);
+DMINT uint8_t min_u8(uint8_t a, uint8_t b);
+DMINT int32_t clamp_s32(int32_t val, int32_t min, int32_t max);
 DMINT float clamp_f32(float val, float min, float max);
 DMINT DmCommandType Dm_embellishmentToCommand(DmEmbellishmentType embellishment);
 DMINT bool DmGuid_equals(DmGuid const* a, DmGuid const* b);
@@ -488,7 +589,7 @@ DMINT void DmMessage_copy(DmMessage* slf, DmMessage* cpy, uint32_t time);
 DMINT void DmMessage_free(DmMessage* slf);
 DMINT DmResult DmMessageQueue_init(DmMessageQueue* slf);
 DMINT void DmMessageQueue_free(DmMessageQueue* slf);
-DMINT void DmMessageQueue_add(DmMessageQueue* slf, DmMessage* msg, uint32_t time, DmQueueConflictResolution cr);
+DMINT DmResult DmMessageQueue_add(DmMessageQueue* slf, DmMessage* msg, uint32_t time, DmQueueConflictResolution cr);
 DMINT bool DmMessageQueue_get(DmMessageQueue* slf, DmMessage* msg);
 DMINT void DmMessageQueue_pop(DmMessageQueue* slf);
 DMINT void DmMessageQueue_clear(DmMessageQueue* slf);
@@ -518,7 +619,7 @@ DMINT void DmPartReference_free(DmPartReference* slf);
 DMINT void DmPattern_init(DmPattern* slf);
 DMINT void DmPattern_free(DmPattern* slf);
 
-DMINT void DmSynth_init(DmSynth* slf);
+DMINT void DmSynth_init(DmSynth* slf, uint32_t sample_rate);
 DMINT void DmSynth_free(DmSynth* slf);
 DMINT void DmSynth_reset(DmSynth* slf);
 

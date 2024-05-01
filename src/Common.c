@@ -14,6 +14,22 @@ int32_t max_s32(int32_t a, int32_t b) {
 	return a > b ? a : b;
 }
 
+uint8_t min_u8(uint8_t a, uint8_t b) {
+	return a < b ? a : b;
+}
+
+int32_t clamp_s32(int32_t val, int32_t min, int32_t max) {
+	if (val < min) {
+		return min;
+	}
+
+	if (val > max) {
+		return max;
+	}
+
+	return val;
+}
+
 float clamp_f32(float val, float min, float max) {
 	if (val < min) {
 		return min;

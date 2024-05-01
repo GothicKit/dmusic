@@ -126,7 +126,7 @@ static size_t DmDlsWave_decodeShort(DmDlsWave const* slf, float* out, size_t len
 	int16_t const* raw = (int16_t const*) slf->pcm;
 	size_t i = 0;
 	for (i = 0; i < size && i < len; ++i) {
-		out[i] = (float) raw[i] / 32767.f;
+		out[i] = (float) raw[i] / INT16_MAX;
 	}
 
 	return i;
@@ -173,8 +173,8 @@ static uint8_t const* DmDls_decodeAdpcmBlock(uint8_t const* adpcm, float* pcm, u
 	int16_t sample_b;
 	DmInt_read(adpcm, &sample_b);
 
-	*pcm++ = (float) sample_b / 32767.f;
-	*pcm++ = (float) sample_a / 32767.f;
+	*pcm++ = (float) sample_b / (float) INT16_MAX;
+	*pcm++ = (float) sample_a / (float) INT16_MAX;
 
 	int coeff_1 = ADPCM_ADAPT_COEFF1[block_predictor];
 	int coeff_2 = ADPCM_ADAPT_COEFF2[block_predictor];
@@ -189,7 +189,7 @@ static uint8_t const* DmDls_decodeAdpcmBlock(uint8_t const* adpcm, float* pcm, u
 		int predictor = (coeff_1 * sample_a + coeff_2 * sample_b) / 256;
 		predictor += nibble * delta;
 		predictor = clamp_16bit(predictor);
-		*pcm++ = (float) ((int16_t) predictor) / INT16_MAX;
+		*pcm++ = (float) predictor / (float)INT16_MAX;
 		sample_b = sample_a;
 		sample_a = (int16_t) (predictor);
 		delta = max_s32((ADPCM_ADAPT_TABLE[(b & 0xF0) >> 4] * delta) / 256, 16);
@@ -199,7 +199,7 @@ static uint8_t const* DmDls_decodeAdpcmBlock(uint8_t const* adpcm, float* pcm, u
 		predictor = (coeff_1 * sample_a + coeff_2 * sample_b) / 256;
 		predictor += nibble * delta;
 		predictor = clamp_16bit(predictor);
-		*pcm++ = (float) ((int16_t) predictor) / INT16_MAX;
+		*pcm++ = (float) predictor / (float)INT16_MAX;
 		sample_b = sample_a;
 		sample_a = (int16_t) (predictor);
 		delta = max_s32((ADPCM_ADAPT_TABLE[b & 0x0F] * delta) / 256, 16);
