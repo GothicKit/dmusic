@@ -218,12 +218,16 @@ static DmResult Dm_createHydra(DmDls* dls, struct tsf_hydra* res) {
 	// 6. Count the number of instrument zones and generators required and allocate them
 	res->ibagNum = 1; // One for the sentinel
 	res->igenNum = 1; // One for the sentinel
+	res->shdrNum = 1; // One for the sentinel
 
 	for (size_t i = 0; i < dls->instrument_count; ++i) {
 		DmDlsInstrument* ins = &dls->instruments[i];
 
-		// -> We need zone one for each instrument region
+		// -> We need one zone for each instrument region
 		res->ibagNum += ins->region_count;
+
+		// -> We need one sample for each instrument region
+		res->shdrNum += ins->region_count;
 
 		// -> We need 6 generators for the implicit 'kKeyRange', 'kVelRange', 'kAttackVolEnv',
 		//   'kInitialAttenuation', 'kSampleModes' and 'kSampleID' for each zone
@@ -246,6 +250,7 @@ static DmResult Dm_createHydra(DmDls* dls, struct tsf_hydra* res) {
 
 	res->ibags = Dm_alloc(sizeof(struct tsf_hydra_ibag) * res->ibagNum);
 	res->igens = Dm_alloc(sizeof(struct tsf_hydra_igen) * res->igenNum);
+	res->shdrs = Dm_alloc(sizeof(struct tsf_hydra_shdr) * res->shdrNum);
 
 	// 7. Count the number of instrument modulators required and allocate them
 	// -> We need one sentinel (modulators are not supported)
@@ -273,7 +278,9 @@ DmResult DmSynth_createTsfForDls(DmDls* dls, tsf** out) {
 	// Decode all PCM and create the sample headers.
 	float* pcm = NULL;
 	int32_t pcm_len = 0;
-	rv = Dm_createHydraSamplesForDls(dls, &pcm, &pcm_len, &hydra.shdrs, &hydra.shdrNum);
+	struct tsf_hydra_shdr* default_shdrs = NULL;
+	int32_t default_shdrs_len = 0;
+	rv = Dm_createHydraSamplesForDls(dls, &pcm, &pcm_len, &default_shdrs, &default_shdrs_len);
 	if (rv != DmResult_SUCCESS) {
 		return rv;
 	}
@@ -284,6 +291,7 @@ DmResult DmSynth_createTsfForDls(DmDls* dls, tsf** out) {
 	uint32_t ibag_ndx = 0;
 	uint32_t igen_ndx = 0;
 	uint32_t imod_ndx = 0;
+	uint32_t shdr_ndx = 0;
 	for (size_t i = 0; i < dls->instrument_count; ++i) {
 		DmDlsInstrument* ins = &dls->instruments[i];
 		uint32_t bank = ins->bank;
@@ -358,12 +366,14 @@ DmResult DmSynth_createTsfForDls(DmDls* dls, tsf** out) {
 			igen_ndx++;
 
 			hydra.igens[igen_ndx].genOper = kSampleID;
-			hydra.igens[igen_ndx].genAmount.wordAmount = reg->link_table_index;
+			hydra.igens[igen_ndx].genAmount.wordAmount = shdr_ndx;
 			igen_ndx++;
 
 			// Additional sample configuration.
-			// TODO(lmichaelis): Some samples are re-used. Is is okay to change these values for them?
-			struct tsf_hydra_shdr* hdr = &hydra.shdrs[reg->link_table_index];
+			struct tsf_hydra_shdr* hdr = &hydra.shdrs[shdr_ndx];
+			*hdr = default_shdrs[reg->link_table_index];
+			shdr_ndx++;
+
 			if (reg->sample.looping) {
 				uint32_t offset = hdr->start;
 				hdr->startLoop = offset + reg->sample.loop_start;
@@ -433,6 +443,7 @@ DmResult DmSynth_createTsfForDls(DmDls* dls, tsf** out) {
 	res->fontSamples = pcm;
 
 	// Lastly, free up all the hydra stuff
+	Dm_free(default_shdrs);
 	Dm_free(hydra.phdrs);
 	Dm_free(hydra.pbags);
 	Dm_free(hydra.pgens);
