@@ -351,11 +351,11 @@ DMAPI void DmPerformance_release(DmPerformance* slf);
 ///       have been played.
 ///
 /// \param slf[in] The performance to play the segment in.
-/// \param sgt[in] The segment to play.
+/// \param sgt[in] The segment to play or `NULL` to simply stop the playing segment.
 /// \param timing The timing bounding to start playing the segment at.
 ///
 /// \return #DmResult_SUCCESS if the operation completed and an error code if it did not.
-/// \retval #DmResult_INVALID_ARGUMENT \p slf or \p sgt was `NULL`.
+/// \retval #DmResult_INVALID_ARGUMENT \p slf was `NULL`.
 /// \retval #DmResult_MEMORY_EXHAUSTED A dynamic memory allocation failed.
 /// \retval #DmResult_MUTEX_ERROR An error occurred while trying to lock an internal mutex.
 ///
@@ -374,7 +374,7 @@ DMAPI DmResult DmPerformance_playSegment(DmPerformance* slf, DmSegment* sgt, DmT
 /// \note The #DmEmbellishment_END_AND_INTRO embellishment is currently not implemented.
 ///
 /// \param slf[in] The performance to play the transition in.
-/// \param sgt[in] The segment to transition to.
+/// \param sgt[in] The segment to transition to or `NULL` to transition to silence.
 /// \param embellishment The embellishment type to use for the transition.
 /// \param timing The timing bounding to start playing the transition at.
 ///
