@@ -102,7 +102,7 @@ static uint32_t Dm_toEmbellishmentFlagset(DmCommandType cmd) {
 }
 
 // See: https://documentation.help/DirectMusic/howmusicvariesduringplayback.htm
-DmPattern* DmStyle_getRandomPattern(DmPerformance* slf, DmCommandType cmd) {
+DmPattern* DmStyle_getRandomPattern(DmStyle* slf, uint32_t groove, DmCommandType cmd) {
 	uint32_t embellishment = Dm_toEmbellishmentFlagset(cmd);
 
 	// Select a random pattern according to the current groove level.
@@ -110,31 +110,34 @@ DmPattern* DmStyle_getRandomPattern(DmPerformance* slf, DmCommandType cmd) {
 	//                   have some way of defining how to select the pattern if more than 1 choice is available
 	//                   but I couldn't find it.
 
-	uint32_t index = rand() % slf->style->patterns.length;
-	for (size_t i = 0; i < slf->style->patterns.length; ++i) {
-		DmPattern* pttn = &slf->style->patterns.data[i];
+	int32_t index = rand() % slf->patterns.length;
+	do {
+		for (size_t i = 0; i < slf->patterns.length; ++i) {
+			DmPattern* pttn = &slf->patterns.data[i];
 
-		// Ignore patterns outside the current groove level.
-		if (slf->groove < pttn->groove_bottom || slf->groove > pttn->groove_top) {
-			continue;
+			// Ignore patterns outside the current groove level.
+			if (groove < pttn->groove_bottom || groove > pttn->groove_top) {
+				continue;
+			}
+
+			// Patterns with a differing embellishment are not supported
+			if (pttn->embellishment != embellishment && !(pttn->embellishment & embellishment)) {
+				continue;
+			}
+
+			// Fix for Gothic 2 in which some patterns are empty but have a groove range of 1-100 with no embellishment
+			// set.
+			if (pttn->embellishment == DmCommand_GROOVE && pttn->length_measures == 1) {
+				continue;
+			}
+
+			if (index == 0) {
+				return pttn;
+			}
+
+			index -= 1;
 		}
-
-		// Patterns with a differing embellishment are not supported
-		if (pttn->embellishment != embellishment && !(pttn->embellishment & embellishment)) {
-			continue;
-		}
-
-		// Fix for Gothic 2 in which some patterns are empty but have a groove range of 1-100 with no embellishment set.
-		if (pttn->embellishment == DmCommand_GROOVE && pttn->length_measures == 1) {
-			continue;
-		}
-
-		if (index == 0) {
-			return pttn;
-		}
-
-		index -= 1;
-	}
+	} while (index >= 0);
 
 	return NULL;
 }

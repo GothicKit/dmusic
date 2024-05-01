@@ -581,7 +581,7 @@ static void DmPerformance_handleCommandMessage(DmPerformance* slf, DmMessage_Com
 		Dm_report(DmLogLevel_WARN, "DmPerformance: Command message with command %d not implemented", msg->command);
 	}
 
-	DmPattern* pttn = DmStyle_getRandomPattern(slf, msg->command);
+	DmPattern* pttn = DmStyle_getRandomPattern(slf->style, slf->groove, msg->command);
 	if (pttn == NULL) {
 		Dm_report(DmLogLevel_WARN, "DmPerformance: No suitable pattern found. Silence ensues ...", msg->command);
 		return;

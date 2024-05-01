@@ -606,7 +606,7 @@ DMINT void DmStyle_release(DmStyle* slf);
 DMINT DmResult DmStyle_parse(DmStyle* slf, void* buf, size_t len);
 DMINT DmResult DmStyle_download(DmStyle* slf, DmLoader* loader);
 DMINT DmPart* DmStyle_findPart(DmStyle* slf, DmPartReference* pref);
-DMINT DmPattern* DmStyle_getRandomPattern(DmPerformance* slf, DmCommandType cmd);
+DMINT DmPattern* DmStyle_getRandomPattern(DmStyle* slf, uint32_t groove, DmCommandType cmd);
 
 DMINT void DmPart_init(DmPart* slf);
 DMINT void DmPart_free(DmPart* slf);
