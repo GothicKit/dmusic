@@ -206,8 +206,8 @@ typedef struct DmNote {
 	int16_t time_offset;
 	uint16_t music_value;
 	uint8_t velocity;
-	uint8_t time_range;
-	uint8_t duration_range;
+	uint32_t time_range;
+	uint32_t duration_range;
 	uint8_t velocity_range;
 	uint8_t inversion_id;
 	DmPlayModeFlags play_mode_flags;

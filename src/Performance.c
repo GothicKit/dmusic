@@ -7,6 +7,7 @@
 enum {
 	DmInt_DEFAULT_TEMPO = 100,
 	DmInt_DEFAULT_SAMPLE_RATE = 44100,
+	DmInt_DEFAULT_SCALE_PATTERN = 0xab5ab5,
 };
 
 DmResult DmPerformance_create(DmPerformance** slf, uint32_t rate) {
@@ -136,22 +137,6 @@ DmResult DmPerformance_playSegment(DmPerformance* slf, DmSegment* sgt, DmTiming 
 	return DmResult_SUCCESS;
 }
 
-static uint32_t DmInt_DEFAULT_SCALE_PATTERN = 0xab5ab5;
-static uint32_t DmInt_FALLBACK_SCALES[12] = {
-    0xab5ab5,
-    0x6ad6ad,
-    0x5ab5ab,
-    0xad5ad5,
-    0x6b56b5,
-    0x5ad5ad,
-    0x56b56b,
-    0xd5ad5a,
-    0xb56b56,
-    0xd6ad6a,
-    0xb5ab5a,
-    0xad6ad6,
-};
-
 static uint8_t bit_count(uint32_t v) {
 	uint8_t count = 0;
 
@@ -164,6 +149,21 @@ static uint8_t bit_count(uint32_t v) {
 }
 
 static uint32_t fixup_scale(uint32_t scale, uint8_t scale_root) {
+	uint32_t const FALLBACK_SCALES[12] = {
+		0xab5ab5,
+		0x6ad6ad,
+		0x5ab5ab,
+		0xad5ad5,
+		0x6b56b5,
+		0x5ad5ad,
+		0x56b56b,
+		0xd5ad5a,
+		0xb56b56,
+		0xd6ad6a,
+		0xb5ab5a,
+		0xad6ad6,
+	};
+
 	// Force the scale to be exactly two octaves wide by zero-ing out the upper octave and
 	// copying the lower octave into the upper one
 	scale = (scale & 0x0FFF) | (scale << 12);
@@ -176,15 +176,15 @@ static uint32_t fixup_scale(uint32_t scale, uint8_t scale_root) {
 
 	// If there are less than 5 bits set in the scale, figure out a fallback to use instead
 	if (bit_count(scale & 0xFFF) <= 4) {
-		uint32_t best_scale = DmInt_DEFAULT_SCALE_PATTERN;
+		uint32_t best_scale = FALLBACK_SCALES[0];
 		uint32_t best_score = 0;
 
 		for (size_t i = 0; i < 12; ++i) {
 			// Determine the score by checking the number of bits which are set in both
-			uint32_t score = bit_count((DmInt_FALLBACK_SCALES[i] & scale) & 0xFFF);
+			uint32_t score = bit_count((FALLBACK_SCALES[i] & scale) & 0xFFF);
 
 			if (score > best_score) {
-				best_scale = DmInt_FALLBACK_SCALES[i];
+				best_scale = FALLBACK_SCALES[i];
 				best_score = score;
 			}
 		}
@@ -338,22 +338,6 @@ static int DmPerformance_musicValueToMidi(struct DmSubChord chord, DmPlayModeFla
 
 #define DmInt_CURVE_SPACING 5
 
-// See https://documentation.help/DirectMusic/dmusiostylenote.htm
-static uint32_t DmPerformance_convertIoTimeRange(uint8_t range) {
-	uint32_t result = 0;
-	if (range <= 190) {
-		result = range;
-	} else if (191 <= range && range <= 212) {
-		result = ((range - 190) * 5) + 190;
-	} else if (213 <= range && range <= 232) {
-		result = ((range - 212) * 10) + 300;
-	} else {
-		// range > 232
-		result = ((range - 232) * 50) + 500;
-	}
-	return result;
-}
-
 static void DmPerformance_playPattern(DmPerformance* slf, DmPattern* pttn) {
 	DmMessageQueue_clear(&slf->music_queue);
 	DmSynth_sendNoteOffEverything(&slf->synth);
@@ -436,22 +420,22 @@ static void DmPerformance_playPattern(DmPerformance* slf, DmPattern* pttn) {
 			uint32_t time = Dm_getTimeOffset(note.grid_start, note.time_offset, part->time_signature);
 
 			if (note.time_range != 0) {
-				uint32_t range = DmPerformance_convertIoTimeRange(note.time_range);
+				uint32_t range = note.time_range;
 				uint32_t rnd = (uint32_t) rand() % range;
 				time -= range - (rnd / 2);
+			}
+
+			uint32_t duration = note.duration;
+			if (note.duration_range != 0) {
+				uint32_t range = note.duration_range;
+				uint32_t rnd = (uint32_t) rand() % range;
+				duration -= range - (rnd / 2);
 			}
 
 			uint32_t velocity = note.velocity;
 			if (note.velocity_range != 0) {
 				uint32_t rnd = (uint32_t) rand() % note.velocity_range;
 				velocity -= note.velocity_range - (rnd / 2);
-			}
-
-			uint32_t duration = note.duration;
-			if (note.duration_range != 0) {
-				uint32_t range = DmPerformance_convertIoTimeRange(note.duration_range);
-				uint32_t rnd = (uint32_t) rand() % range;
-				duration -= range - (rnd / 2);
 			}
 
 			DmMessage msg;
@@ -894,7 +878,7 @@ static DmResult DmPerformance_composeTransition(DmPerformance* slf,
 
 	if (embellishment != DmEmbellishment_NONE) {
 		msg.type = DmMessage_TEMPO;
-		msg.tempo.tempo = slf->tempo;
+		msg.tempo.tempo = slf->style->tempo;
 		rv = DmMessageList_add(&trans->messages, msg);
 		if (rv != DmResult_SUCCESS) {
 			return rv;

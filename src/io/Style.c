@@ -61,6 +61,23 @@ static DmResult DmStyle_parsePattern(DmPattern* slf, DmRiff* rif) {
 	return DmResult_SUCCESS;
 }
 
+// See https://documentation.help/DirectMusic/dmusiostylenote.htm
+static uint32_t DmStyle_toCorrectedRange(uint8_t range) {
+	if (range <= 190) {
+		return range;
+	}
+
+	if (191 <= range && range <= 212) {
+		return ((range - 190) * 5) + 190;
+	}
+
+	if (213 <= range && range <= 232) {
+		return ((range - 212) * 10) + 300;
+	}
+
+	return ((range - 232) * 50) + 500;
+}
+
 static DmResult DmStyle_parsePartNotes(DmPart* part, DmRiff* rif) {
 	uint32_t item_size = 0;
 	DmRiff_readDword(rif, &item_size);
@@ -81,8 +98,15 @@ static DmResult DmStyle_parsePartNotes(DmPart* part, DmRiff* rif) {
 		DmRiff_readShort(rif, &part->notes[i].time_offset);
 		DmRiff_readWord(rif, &part->notes[i].music_value);
 		DmRiff_readByte(rif, &part->notes[i].velocity);
-		DmRiff_readByte(rif, &part->notes[i].time_range);
-		DmRiff_readByte(rif, &part->notes[i].duration_range);
+
+		uint8_t time_range = 0;
+		DmRiff_readByte(rif, &time_range);
+		part->notes[i].time_range = DmStyle_toCorrectedRange(time_range);
+
+		uint8_t duration_range = 0;
+		DmRiff_readByte(rif, &duration_range);
+		part->notes[i].duration_range = DmStyle_toCorrectedRange(duration_range);
+
 		DmRiff_readByte(rif, &part->notes[i].velocity_range);
 		DmRiff_readByte(rif, &part->notes[i].inversion_id);
 
