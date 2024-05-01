@@ -3,6 +3,13 @@
 This project aims to re-implement Microsoft's long-deprecated DirectMusic API available in early Direct3D and DirectX
 versions. It is currently under heavy development at this time and might be unstable for some use-cases.
 
+Soundtracks tested and verified to work (somewhat) correctly:
+ * Gothic
+ * Gothic II (+ Night of the Raven)
+
+If you tested other games, please let me know. If you own any games with `.dls`, `.sty` and `.sgt` files in the data
+folders, and you want to contribute, please contact me as well or open an issue.
+
 ## Example
 
 Here's how you play back a segment. This example works on POSIX only since it uses `<sys/stat.h>` for the file resolver.
