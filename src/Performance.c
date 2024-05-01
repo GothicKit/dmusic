@@ -81,14 +81,12 @@ void DmPerformance_release(DmPerformance* slf) {
 	Dm_free(slf);
 }
 
-// See https://documentation.help/DirectMusic/dmussegfflags.htm
-static uint32_t DmPerformance_getStartTime(DmPerformance* slf, DmTiming timing) {
+static uint32_t Dm_getBoundaryOffset(DmPerformance* slf, DmTiming timing) {
 	uint32_t timing_unit_length = 0;
 
 	switch (timing) {
 	case DmTiming_INSTANT:
-		timing_unit_length = 0;
-		break;
+		return slf->time;
 	case DmTiming_GRID:
 		timing_unit_length = Dm_getBeatLength(slf->time_signature) / slf->time_signature.grids_per_beat;
 		break;
@@ -120,7 +118,7 @@ DmResult DmPerformance_playSegment(DmPerformance* slf, DmSegment* sgt, DmTiming 
 		return DmResult_INVALID_ARGUMENT;
 	}
 
-	uint32_t offset = DmPerformance_getStartTime(slf, timing);
+	uint32_t offset = Dm_getBoundaryOffset(slf, timing);
 
 	DmMessage msg;
 	msg.time = 0;
@@ -136,92 +134,6 @@ DmResult DmPerformance_playSegment(DmPerformance* slf, DmSegment* sgt, DmTiming 
 
 	(void) mtx_unlock(&slf->mod_lock);
 	return DmResult_SUCCESS;
-}
-
-static uint32_t DmPerformance_commandToEmbellishment(DmCommandType cmd) {
-	uint32_t f = 0;
-
-	if (cmd & DmCommand_FILL) {
-		f |= 1; // "fill"
-	}
-
-	if (cmd & DmCommand_INTRO) {
-		f |= 2; // "intro"
-	}
-
-	if (cmd & DmCommand_BREAK) {
-		f |= 4; // "break"
-	}
-
-	if (cmd & DmCommand_END) {
-		f |= 8; // "end"
-	}
-
-	return f; // "normal"
-}
-
-// See: https://documentation.help/DirectMusic/howmusicvariesduringplayback.htm
-static DmPattern* DmPerformance_choosePattern(DmPerformance* slf, DmCommandType cmd) {
-	size_t suitable_pattern_index = 0;
-	size_t suitable_pattern_count = 0;
-
-	uint32_t embellishment = DmPerformance_commandToEmbellishment(cmd);
-	for (size_t i = 0; i < slf->style->patterns.length; ++i) {
-		DmPattern* pttn = &slf->style->patterns.data[i];
-
-		// Ignore patterns outside the current groove level.
-		if (slf->groove < pttn->groove_bottom || slf->groove > pttn->groove_top) {
-			continue;
-		}
-
-		// Patterns with a differing embellishment are not supported
-		if (pttn->embellishment != embellishment && !(pttn->embellishment & embellishment)) {
-			continue;
-		}
-
-		// Fix for Gothic 2 in which some patterns are empty but have a groove range of 1-100 with no embellishment set.
-		if (pttn->embellishment == DmCommand_GROOVE && pttn->length_measures == 1) {
-			continue;
-		}
-
-		suitable_pattern_index = i;
-		suitable_pattern_count += 1;
-	}
-
-	if (suitable_pattern_count == 0) {
-		return NULL;
-	}
-
-	if (suitable_pattern_count == 1) {
-		return &slf->style->patterns.data[suitable_pattern_index];
-	}
-
-	// Select a random pattern. TODO(lmichaelis): This behaviour seems to be associated with DX < 8 only,
-	// newer versions should have some way of defining how to select the pattern if more than 1 choice is
-	// available but I couldn't find it.
-	suitable_pattern_index = (size_t) rand() % suitable_pattern_count;
-
-	// Do the thing from above again, but this time return the selected pattern!
-	// TODO(lmichaelis): Deduplicate!
-	for (size_t i = 0; i < slf->style->patterns.length; ++i) {
-		DmPattern* pttn = &slf->style->patterns.data[i];
-
-		if (slf->groove < pttn->groove_bottom || slf->groove > pttn->groove_top) {
-			continue;
-		}
-
-		if (pttn->embellishment != DmPerformance_commandToEmbellishment(cmd)) {
-			continue;
-		}
-
-		if (suitable_pattern_index == 0) {
-			return pttn;
-		}
-
-		suitable_pattern_index--;
-	}
-
-	return NULL;
 }
 
 static uint32_t DmInt_DEFAULT_SCALE_PATTERN = 0xab5ab5;
@@ -240,7 +152,7 @@ static uint32_t DmInt_FALLBACK_SCALES[12] = {
     0xad6ad6,
 };
 
-uint8_t bit_count(uint32_t v) {
+static uint8_t bit_count(uint32_t v) {
 	uint8_t count = 0;
 
 	for (uint8_t i = 0u; i < 32; ++i) {
@@ -251,7 +163,7 @@ uint8_t bit_count(uint32_t v) {
 	return count;
 }
 
-uint32_t fixup_scale(uint32_t scale, uint8_t scale_root) {
+static uint32_t fixup_scale(uint32_t scale, uint8_t scale_root) {
 	// Force the scale to be exactly two octaves wide by zero-ing out the upper octave and
 	// copying the lower octave into the upper one
 	scale = (scale & 0x0FFF) | (scale << 12);
@@ -263,13 +175,12 @@ uint32_t fixup_scale(uint32_t scale, uint8_t scale_root) {
 	scale = (scale & 0x0FFF) | (scale << 12);
 
 	// If there are less than 5 bits set in the scale, figure out a fallback to use instead
-	// TODO: Random, but sure.
 	if (bit_count(scale & 0xFFF) <= 4) {
 		uint32_t best_scale = DmInt_DEFAULT_SCALE_PATTERN;
 		uint32_t best_score = 0;
 
 		for (size_t i = 0; i < 12; ++i) {
-			// Determine the score by checking the number of bits which are are set in both
+			// Determine the score by checking the number of bits which are set in both
 			uint32_t score = bit_count((DmInt_FALLBACK_SCALES[i] & scale) & 0xFFF);
 
 			if (score > best_score) {
@@ -426,10 +337,6 @@ static int DmPerformance_musicValueToMidi(struct DmSubChord chord, DmPlayModeFla
 }
 
 #define DmInt_CURVE_SPACING 5
-
-static float lerp(float x, float start, float end) {
-	return (1 - x) * start + x * end;
-}
 
 // See https://documentation.help/DirectMusic/dmusiostylenote.htm
 static uint32_t DmPerformance_convertIoTimeRange(uint8_t range) {
@@ -690,7 +597,7 @@ static void DmPerformance_handleCommandMessage(DmPerformance* slf, DmMessage_Com
 		Dm_report(DmLogLevel_WARN, "DmPerformance: Command message with command %d not implemented", msg->command);
 	}
 
-	DmPattern* pttn = DmPerformance_choosePattern(slf, msg->command);
+	DmPattern* pttn = DmStyle_getRandomPattern(slf, msg->command);
 	if (pttn == NULL) {
 		Dm_report(DmLogLevel_WARN, "DmPerformance: No suitable pattern found. Silence ensues ...", msg->command);
 		return;

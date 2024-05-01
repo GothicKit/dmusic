@@ -18,6 +18,11 @@ uint8_t min_u8(uint8_t a, uint8_t b) {
 	return a < b ? a : b;
 }
 
+float lerp(float x, float start, float end) {
+	return (1 - x) * start + x * end;
+}
+
+
 int32_t clamp_s32(int32_t val, int32_t min, int32_t max) {
 	if (val < min) {
 		return min;

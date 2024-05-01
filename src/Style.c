@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: MIT-Modern-Variant
 #include "_Internal.h"
 
+#include <stdlib.h>
+
 DmResult DmStyle_create(DmStyle** slf) {
 	if (slf == NULL) {
 		return DmResult_INVALID_ARGUMENT;
@@ -72,6 +74,66 @@ DmPart* DmStyle_findPart(DmStyle* slf, DmPartReference* pref) {
 		if (DmGuid_equals(&slf->parts.data[i].part_id, &pref->part_id)) {
 			return &slf->parts.data[i];
 		}
+	}
+
+	return NULL;
+}
+
+static uint32_t Dm_toEmbellishmentFlagset(DmCommandType cmd) {
+	uint32_t f = 0;
+
+	if (cmd & DmCommand_FILL) {
+		f |= 1;
+	}
+
+	if (cmd & DmCommand_INTRO) {
+		f |= 2;
+	}
+
+	if (cmd & DmCommand_BREAK) {
+		f |= 4;
+	}
+
+	if (cmd & DmCommand_END) {
+		f |= 8;
+	}
+
+	return f;
+}
+
+// See: https://documentation.help/DirectMusic/howmusicvariesduringplayback.htm
+DmPattern* DmStyle_getRandomPattern(DmPerformance* slf, DmCommandType cmd) {
+	uint32_t embellishment = Dm_toEmbellishmentFlagset(cmd);
+
+	// Select a random pattern according to the current groove level.
+	// TODO(lmichaelis): This behaviour seems to be associated with DX < 8 only, newer versions should
+	//                   have some way of defining how to select the pattern if more than 1 choice is available
+	//                   but I couldn't find it.
+
+	uint32_t index = rand() % slf->style->patterns.length;
+	for (size_t i = 0; i < slf->style->patterns.length; ++i) {
+		DmPattern* pttn = &slf->style->patterns.data[i];
+
+		// Ignore patterns outside the current groove level.
+		if (slf->groove < pttn->groove_bottom || slf->groove > pttn->groove_top) {
+			continue;
+		}
+
+		// Patterns with a differing embellishment are not supported
+		if (pttn->embellishment != embellishment && !(pttn->embellishment & embellishment)) {
+			continue;
+		}
+
+		// Fix for Gothic 2 in which some patterns are empty but have a groove range of 1-100 with no embellishment set.
+		if (pttn->embellishment == DmCommand_GROOVE && pttn->length_measures == 1) {
+			continue;
+		}
+
+		if (index == 0) {
+			return pttn;
+		}
+
+		index -= 1;
 	}
 
 	return NULL;

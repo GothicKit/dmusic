@@ -565,6 +565,7 @@ DMINT void Dm_report(DmLogLevel lvl, char const* fmt, ...);
 DMINT size_t max_usize(size_t a, size_t b);
 DMINT int32_t max_s32(int32_t a, int32_t b);
 DMINT uint8_t min_u8(uint8_t a, uint8_t b);
+DMINT float lerp(float x, float start, float end);
 DMINT int32_t clamp_s32(int32_t val, int32_t min, int32_t max);
 DMINT float clamp_f32(float val, float min, float max);
 DMINT DmCommandType Dm_embellishmentToCommand(DmEmbellishmentType embellishment);
@@ -605,6 +606,7 @@ DMINT void DmStyle_release(DmStyle* slf);
 DMINT DmResult DmStyle_parse(DmStyle* slf, void* buf, size_t len);
 DMINT DmResult DmStyle_download(DmStyle* slf, DmLoader* loader);
 DMINT DmPart* DmStyle_findPart(DmStyle* slf, DmPartReference* pref);
+DMINT DmPattern* DmStyle_getRandomPattern(DmPerformance* slf, DmCommandType cmd);
 
 DMINT void DmPart_init(DmPart* slf);
 DMINT void DmPart_free(DmPart* slf);
