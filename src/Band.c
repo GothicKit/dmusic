@@ -43,17 +43,20 @@ void DmBand_release(DmBand* slf) {
 	Dm_free(slf);
 }
 
-static DmDlsInstrument* DmBand_findDlsInstrument(DmInstrument* slf, DmDls* dls) {
+DmDlsInstrument* DmInstrument_getDlsInstrument(DmInstrument* slf) {
+	if (slf == NULL || slf->dls == NULL) {
+		return NULL;
+	}
+
 	uint32_t bank = (slf->patch & 0xFF00U) >> 8;
 	uint32_t patch = slf->patch & 0xFFU;
 
 	DmDlsInstrument* ins = NULL;
-	for (size_t i = 0; i < dls->instrument_count; ++i) {
-		ins = &dls->instruments[i];
+	for (size_t i = 0; i < slf->dls->instrument_count; ++i) {
+		ins = &slf->dls->instruments[i];
 
 		// TODO(lmichaelis): We need to ignore drum kits for now since I don't know how to handle them properly
 		if (ins->bank & DmDls_DRUM_KIT) {
-			Dm_report(DmLogLevel_DEBUG, "DmBand: Ignoring DLS drum-kit instrument '%s'", ins->info.inam);
 			continue;
 		}
 
@@ -104,15 +107,9 @@ DmResult DmBand_download(DmBand* slf, DmLoader* loader) {
 			continue;
 		}
 
-		rv = DmLoader_getDownloadableSound(loader, &instrument->reference, &instrument->dls_collection);
-		if (rv != DmResult_SUCCESS) {
+		rv = DmLoader_getDownloadableSound(loader, &instrument->reference, &instrument->dls);
+		if (rv != DmResult_SUCCESS || instrument->dls == NULL) {
 			break;
-		}
-
-		// Locate and store the referenced DLS-instrument
-		instrument->dls = DmBand_findDlsInstrument(instrument, instrument->dls_collection);
-		if (instrument->dls == NULL) {
-			continue;
 		}
 
 		Dm_report(DmLogLevel_DEBUG,
@@ -125,34 +122,11 @@ DmResult DmBand_download(DmBand* slf, DmLoader* loader) {
 	return rv;
 }
 
-bool DmBand_isSortOfSameAs(DmBand* slf, DmBand* oth) {
-	if (slf == oth) {
-		return true;
-	}
-
-	if (slf == NULL || oth == NULL) {
-		return false;
-	}
-
-	if (slf->instrument_count != oth->instrument_count) {
-		return false;
-	}
-
-	for (size_t i = 0; i < oth->instrument_count; ++i) {
-		if (slf->instruments[i].dls != oth->instruments[i].dls) {
-			return false;
-		}
-	}
-
-	return true;
-}
-
 void DmInstrument_free(DmInstrument* slf) {
 	if (slf == NULL || slf->dls == NULL) {
 		return;
 	}
 
-	DmDls_release(slf->dls_collection);
+	DmDls_release(slf->dls);
 	slf->dls = NULL;
-	slf->dls_collection = NULL;
 }

@@ -144,7 +144,7 @@ static size_t DmSynth_convertGeneratorArticulators(struct tsf_hydra_igen* gens, 
 }
 
 DmResult DmSynth_createTsfForInstrument(DmInstrument* slf, tsf** out) {
-	DmDlsInstrument* dls = slf->dls;
+	DmDlsInstrument* dls = DmInstrument_getDlsInstrument(slf);
 	if (dls == NULL) {
 		return DmResult_NOT_FOUND;
 	}
@@ -155,7 +155,7 @@ DmResult DmSynth_createTsfForInstrument(DmInstrument* slf, tsf** out) {
 	// 1.1. Count the number of PCM samples actually required after decoding.
 	size_t sample_count = 0;
 	for (uint32_t i = 0; i < dls->region_count; ++i) {
-		DmDlsWave* wav = &slf->dls_collection->wave_table[dls->regions[i].link_table_index];
+		DmDlsWave* wav = &slf->dls->wave_table[dls->regions[i].link_table_index];
 		sample_count += DmDls_decodeSamples(wav, NULL, 0);
 
 		// There are 46 0-samples after each "real" sample
@@ -176,7 +176,7 @@ DmResult DmSynth_createTsfForInstrument(DmInstrument* slf, tsf** out) {
 
 	size_t sample_offset = 0;
 	for (uint32_t i = 0; i < dls->region_count; ++i) {
-		DmDlsWave* wav = &slf->dls_collection->wave_table[dls->regions[i].link_table_index];
+		DmDlsWave* wav = &slf->dls->wave_table[dls->regions[i].link_table_index];
 
 		strncpy(sample_headers[i].sampleName, wav->info.inam, 19);
 

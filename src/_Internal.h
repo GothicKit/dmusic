@@ -98,8 +98,8 @@ typedef struct DmInstrument {
 	uint32_t channel_priority;
 	DmReference reference;
 
-	DmDls* dls_collection;
-	DmDlsInstrument* dls;
+	/// \brief A pointer to a loaded DLS file containing the instrument samples.
+	DmDls* dls;
 } DmInstrument;
 
 typedef struct DmBand {
@@ -498,7 +498,7 @@ DMINT DmBand* DmBand_retain(DmBand* slf);
 DMINT void DmBand_release(DmBand* slf);
 DMINT DmResult DmBand_parse(DmBand* slf, DmRiff* rif);
 DMINT DmResult DmBand_download(DmBand* slf, DmLoader* loader);
-DMINT bool DmBand_isSortOfSameAs(DmBand* slf, DmBand* oth);
+DMINT DmDlsInstrument* DmInstrument_getDlsInstrument(DmInstrument* slf);
 DMINT void DmInstrument_free(DmInstrument* slf);
 
 DMINT DmResult DmStyle_create(DmStyle** slf);

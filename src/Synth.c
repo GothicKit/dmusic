@@ -51,7 +51,7 @@ static DmSynthInstrument* DmSynth_getInstrument(DmSynth* slf, DmInstrument* ins)
 	for (size_t i = 0; i < slf->instruments.length; ++i) {
 		uint32_t bank = (ins->patch & 0xFF00U) >> 8;
 		uint32_t patch = ins->patch & 0xFFU;
-		if (slf->instruments.data[i].dls == ins->dls_collection && slf->instruments.data[i].bank == bank &&
+		if (slf->instruments.data[i].dls == ins->dls && slf->instruments.data[i].bank == bank &&
 		    slf->instruments.data[i].patch == patch) {
 			return &slf->instruments.data[i];
 		}
@@ -80,7 +80,7 @@ static DmResult DmSynth_loadInstruments(DmSynth* slf, DmBand* band) {
 
 			new_ins.bank = (ins->patch & 0xFF00U) >> 8;
 			new_ins.patch = ins->patch & 0xFFU;
-			new_ins.dls = ins->dls_collection;
+			new_ins.dls = ins->dls;
 
 			rv = DmSynthInstrumentArray_add(&slf->instruments, new_ins);
 			if (rv != DmResult_SUCCESS) {
