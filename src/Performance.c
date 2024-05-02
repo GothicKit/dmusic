@@ -744,10 +744,12 @@ static void DmPerformance_handleSegmentMessage(DmPerformance* slf, DmMessage_Seg
 static void DmPerformance_handleMessage(DmPerformance* slf, DmMessage* msg) {
 	switch (msg->type) {
 	case DmMessage_SEGMENT:
-		Dm_report(DmLogLevel_TRACE,
-		          "DmPerformance(Message): time=%d type=segment-change name=\"%s\"",
-		          slf->time,
-		          msg->segment.segment->info.unam);
+		if (msg->segment.segment) {
+			Dm_report(DmLogLevel_TRACE,
+					  "DmPerformance(Message): time=%d type=segment-change name=\"%s\"",
+					  slf->time,
+					  msg->segment.segment->info.unam);
+		}
 
 		DmPerformance_handleSegmentMessage(slf, &msg->segment);
 		break;
