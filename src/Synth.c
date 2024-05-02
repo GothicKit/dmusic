@@ -22,6 +22,8 @@ void DmSynth_init(DmSynth* slf, uint32_t sample_rate) {
 	memset(slf, 0, sizeof *slf);
 
 	slf->rate = sample_rate;
+	slf->volume = 1;
+
 	DmSynthFontArray_init(&slf->fonts);
 }
 
@@ -82,6 +84,7 @@ static DmResult DmSynth_updateFonts(DmSynth* slf, DmBand* band) {
 			}
 
 			tsf_set_output(new_fnt.syn, TSF_STEREO_INTERLEAVED, slf->rate, 0);
+			tsf_set_volume(new_fnt.syn, slf->volume);
 
 			rv = DmSynthFontArray_add(&slf->fonts, new_fnt);
 			if (rv != DmResult_SUCCESS) {
@@ -151,6 +154,7 @@ static DmResult DmSynth_assignInstrumentChannels(DmSynth* slf, DmBand* band) {
 		uint32_t bank = (ins->patch & 0xFF00U) >> 8;
 		uint32_t patch = ins->patch & 0xFFU;
 
+		tsf_set_volume(fnt->syn, slf->volume);
 		tsf_channel_set_bank_preset(fnt->syn, ins->channel, bank, patch);
 
 		// Update the instrument's properties
@@ -319,6 +323,7 @@ void DmSynth_setVolume(DmSynth* slf, float vol) {
 		return;
 	}
 
+	slf->volume = vol;
 	for (size_t i = 0; i < slf->fonts.length; ++i) {
 		tsf_set_volume(slf->fonts.data[i].syn, vol);
 	}

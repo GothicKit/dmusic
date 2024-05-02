@@ -473,6 +473,7 @@ DmArray_DEFINE(DmSynthFontArray, DmSynthFont);
 
 typedef struct DmSynth {
 	uint32_t rate;
+	float volume;
 	DmSynthFontArray fonts;
 
 	size_t channels_len;
