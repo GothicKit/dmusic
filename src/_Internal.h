@@ -154,7 +154,8 @@ typedef struct DmInstrument {
 	/// \brief The priority of the instrument over other instruments if no additional
 	///        voices can be allocated by the synthesizer.
 	///
-	/// > The number of notes that can be played simultaneously is limited by the number of voices available on the port.
+	/// > The number of notes that can be played simultaneously is limited by the number of voices available on the
+	/// port.
 	///   A voice is a set of resources dedicated to the synthesis of a single note or waveform being played on a
 	///   channel. In the event that more notes are playing than there are available voices, one or more notes must
 	///   be suppressed by the synthesizer. The choice is determined by the priority of the voice currently playing the
@@ -568,6 +569,7 @@ DMINT uint8_t min_u8(uint8_t a, uint8_t b);
 DMINT float lerp(float x, float start, float end);
 DMINT int32_t clamp_s32(int32_t val, int32_t min, int32_t max);
 DMINT float clamp_f32(float val, float min, float max);
+DMINT int32_t Dm_randRange(int32_t range);
 DMINT DmCommandType Dm_embellishmentToCommand(DmEmbellishmentType embellishment);
 DMINT bool DmGuid_equals(DmGuid const* a, DmGuid const* b);
 DMINT void DmTimeSignature_parse(DmTimeSignature* slf, DmRiff* rif);
@@ -576,6 +578,16 @@ DMINT uint32_t Dm_getBeatLength(DmTimeSignature sig);
 DMINT uint32_t Dm_getMeasureLength(DmTimeSignature sig);
 DMINT double Dm_getTicksPerSample(DmTimeSignature time_signature, double beats_per_minute, uint32_t sample_rate);
 DMINT uint32_t Dm_getTimeOffset(uint32_t grid_start, int32_t time_offset, DmTimeSignature sig);
+DMINT uint32_t Dm_getSampleCountForDuration(uint32_t duration,
+                                            DmTimeSignature time_signature,
+                                            double tempo,
+                                            uint32_t sample_rate,
+                                            uint8_t channels);
+DMINT uint32_t Dm_getDurationForSampleCount(uint32_t samples,
+                                            DmTimeSignature time_signature,
+                                            double tempo,
+                                            uint32_t sample_rate,
+                                            uint8_t channels);
 
 DMINT DmResult DmLoader_getStyle(DmLoader* slf, DmReference const* ref, DmStyle** sty);
 DMINT DmResult DmLoader_getDownloadableSound(DmLoader* slf, DmReference const* ref, DmDls** snd);

@@ -338,213 +338,300 @@ static int DmPerformance_musicValueToMidi(struct DmSubChord chord, DmPlayModeFla
 
 #define DmInt_CURVE_SPACING 5
 
-static int32_t Dm_randRange(int32_t range) {
-	int32_t rnd = rand() % range;
-	return range - (rnd / 2);
-}
+static DmResult DmPattern_generateNoteMessages(DmPart* part,
+                                               struct DmSubChord chord,
+                                               uint32_t time,
+                                               uint32_t variation,
+                                               uint32_t channel,
+                                               DmMessageQueue* out) {
+	// Now we are ready to create all the note on/note off messages
+	// for this pattern
+	for (size_t j = 0; j < part->note_count; ++j) {
+		DmNote note = part->notes[j];
 
-static void DmPerformance_playPattern(DmPerformance* slf, DmPattern* pttn) {
-	DmMessageQueue_clear(&slf->music_queue);
-	DmSynth_sendNoteOffEverything(&slf->synth);
-	DmSynth_reset(&slf->synth);
-
-	int variation_lock[256];
-	for (size_t i = 0; i < 256; ++i) {
-		variation_lock[i] = -1;
-	}
-
-	for (size_t i = 0; i < pttn->parts.length; ++i) {
-		DmPartReference* pref = &pttn->parts.data[i];
-		DmPart* part = DmStyle_findPart(slf->style, pref);
-		if (part == NULL) {
-			Dm_report(DmLogLevel_ERROR, "DmPerformance: Part reference could not be resolved!");
+		// We ignore notes which do not correspond to the selected variation
+		if (!(note.variation & variation)) {
 			continue;
 		}
 
-		// If the variation lock is nonzero, we need select the same variation for all parts
-		// with the same lock ID. Otherwise, we play a variation according to the settings.
-		int32_t variation = variation_lock[pref->variation_lock_id];
-		if (pref->variation_lock_id == 0 || variation < 0) {
-			if (pref->random_variation == DmVariation_SEQUENTIAL) {
-				// This pattern is supposed to play its variations in sequence
-				// TODO(lmichaelis): This global counter is probably not correct. Replace it with one specific for each
-				// pattern
-				variation = (int32_t) slf->variation;
-			} else if (pref->random_variation == DmVariation_RANDOM) {
-				// This pattern is supposed to play its variations in a random order
-				variation = rand();
-			} else {
-				Dm_report(DmLogLevel_ERROR,
-				          "DmPerformance: Unknown pattern variation selection: %d",
-				          pref->random_variation);
-			}
+		DmPlayModeFlags flags = note.play_mode_flags == DmPlayMode_NONE ? part->play_mode_flags : note.play_mode_flags;
 
-			variation_lock[pref->variation_lock_id] = (int) variation;
+		int midi = note.music_value;
+		if (flags != DmPlayMode_FIXED) {
+			midi = DmPerformance_musicValueToMidi(chord, flags, note.music_value);
 		}
 
-		variation = 1 << ((uint32_t) variation % DmPart_getValidVariationCount(part));
+		if (midi < 0) {
+			// We were unable to convert the music value
+			Dm_report(DmLogLevel_WARN, "DmPerformance: Unable to convert music value %d to MIDI", note.music_value);
+			continue;
+		}
 
-		// Now we need to select the correct sub-chord to use for the pattern
-		// by comparing against the sub-chord level of the pattern. By default,
-		// we just use the first one.
-		struct DmSubChord chord = slf->chord.subchords[0];
+		uint32_t offset = Dm_getTimeOffset(note.grid_start, note.time_offset, part->time_signature);
 
-		for (size_t j = 0; j < slf->chord.subchord_count; ++j) {
-			if (slf->chord.subchords[j].levels & (1 << pref->subchord_level)) {
-				chord = slf->chord.subchords[j];
+		if (note.time_range != 0) {
+			offset += Dm_randRange(note.time_range);
+		}
+
+		uint32_t duration = note.duration;
+		if (note.duration_range != 0) {
+			offset += Dm_randRange(note.duration_range);
+		}
+
+		uint32_t velocity = note.velocity;
+		if (note.velocity_range != 0) {
+			offset += Dm_randRange(note.velocity_range);
+		}
+
+		DmMessage msg;
+		msg.type = DmMessage_NOTE;
+		msg.time = 0;
+
+		msg.note.on = true;
+		msg.note.note = (uint8_t) midi;
+		msg.note.velocity = (uint8_t) velocity;
+		msg.note.channel = channel;
+
+		DmResult rv = DmMessageQueue_add(out, &msg, time + offset, DmQueueConflict_APPEND);
+		if (rv != DmResult_SUCCESS) {
+			return rv;
+		}
+
+		msg.note.on = false;
+		msg.note.note = (uint8_t) midi;
+
+		rv = DmMessageQueue_add(out, &msg, time + offset + duration, DmQueueConflict_APPEND);
+		if (rv != DmResult_SUCCESS) {
+			return rv;
+		}
+	}
+
+	return DmResult_SUCCESS;
+}
+
+static float DmCurve_lerp(DmCurve* curve, float phase) {
+	switch (curve->curve_shape) {
+	case DmCurveShape_LINEAR:
+		return lerp(phase, curve->start_value, curve->end_value);
+	case DmCurveShape_INSTANT:
+		return curve->end_value;
+	case DmCurveShape_EXP:
+		return lerp(powf(phase, 4), curve->start_value, curve->end_value);
+	case DmCurveShape_LOG:
+		return lerp(sqrtf(phase), curve->start_value, curve->end_value);
+	case DmCurveShape_SINE: {
+		phase = (sinf((phase - 0.5f) * (float) M_PI) + 1) * 0.5f;
+		return lerp(phase, curve->start_value, curve->end_value);
+	}
+	}
+
+	return curve->start_value;
+}
+
+static DmResult
+DmPattern_generateControlChangeCurve(DmCurve* curve, uint32_t time, uint32_t channel, DmMessageQueue* out) {
+	// Some MIDI control curves have invalid ranges (e.g. -22000 to 127)
+	bool start_in_range = curve->start_value >= 0 && curve->start_value <= 127;
+	bool end_in_range = curve->end_value >= 0 && curve->end_value <= 127;
+	if (!(start_in_range && end_in_range)) {
+		Dm_report(DmLogLevel_DEBUG, "DmPerformance: Curve is out-of-range");
+		return DmResult_SUCCESS;
+	}
+
+	float prev = (float) curve->start_value - 1;
+	for (uint32_t k = 0; k < (curve->duration / DmInt_CURVE_SPACING); ++k) {
+		uint32_t offset = k * DmInt_CURVE_SPACING;
+		float phase = (float) offset / (float) curve->duration;
+		float value = DmCurve_lerp(curve, phase);
+
+		DmMessage msg;
+		msg.time = 0;
+
+		msg.type = DmMessage_CONTROL;
+		msg.control.control = curve->cc_data;
+		msg.control.channel = channel;
+		msg.control.value = value / 127.f;
+		msg.control.reset = curve->flags & DmCurveFlags_RESET;
+		msg.control.reset_value = curve->reset_value / 127.f;
+
+		// Optimization: Don't emit a message if the value is the same as the previous one.
+		if (msg.control.value == prev) {
+			continue;
+		}
+
+		DmResult rv = DmMessageQueue_add(out, &msg, time + offset, DmQueueConflict_APPEND);
+		if (rv != DmResult_SUCCESS) {
+			return rv;
+		}
+
+		prev = msg.control.value;
+	}
+
+	return DmResult_SUCCESS;
+}
+
+static DmResult DmPattern_generatePitchBendCurve(DmCurve* curve, uint32_t time, uint32_t channel, DmMessageQueue* out) {
+	int prev = curve->start_value;
+	for (uint32_t k = 0; k < (curve->duration / DmInt_CURVE_SPACING); ++k) {
+		uint32_t offset = k * DmInt_CURVE_SPACING;
+		float phase = (float) offset / (float) curve->duration;
+		float value = DmCurve_lerp(curve, phase);
+
+		DmMessage msg;
+		msg.time = 0;
+
+		msg.type = DmMessage_PITCH_BEND;
+		msg.pitch_bend.value = (int) value;
+		msg.pitch_bend.channel = channel;
+		msg.pitch_bend.reset = curve->flags & DmCurveFlags_RESET;
+		msg.pitch_bend.reset_value = (int) value;
+
+		// Optimization: Don't emit a message if the value is the same as the previous one.
+		if (msg.pitch_bend.value == prev) {
+			continue;
+		}
+
+		DmResult rv = DmMessageQueue_add(out, &msg, time + offset, DmQueueConflict_APPEND);
+		if (rv != DmResult_SUCCESS) {
+			return rv;
+		}
+
+		prev = msg.pitch_bend.value;
+	}
+
+	return DmResult_SUCCESS;
+}
+
+static DmResult DmPattern_generateCurveMessages(DmPart* part,
+                                                uint32_t time,
+                                                uint32_t variation,
+                                                uint32_t channel,
+                                                DmMessageQueue* out) {
+	for (size_t j = 0; j < part->curve_count; ++j) {
+		DmCurve curve = part->curves[j];
+
+		// We ignore notes which do not correspond to the selected variation
+		if (!(curve.variation & variation)) {
+			continue;
+		}
+
+		uint32_t start = Dm_getTimeOffset(curve.grid_start, curve.time_offset, part->time_signature);
+
+		DmResult rv = DmResult_SUCCESS;
+		switch (curve.event_type) {
+		case DmCurveType_PITCH_BEND:
+			rv = DmPattern_generatePitchBendCurve(&curve, time + start, channel, out);
+			break;
+		case DmCurveType_CONTROL_CHANGE:
+			rv = DmPattern_generateControlChangeCurve(&curve, time + start, channel, out);
+			break;
+		case DmCurveType_MONO_AFTERTOUCH:
+		case DmCurveType_POLY_AFTERTOUCH:
+			Dm_report(DmLogLevel_WARN,
+			          "DmPerformance: Curve type %d not implemented (midi channel pressure)",
+			          curve.event_type);
+			break;
+		}
+
+		if (rv != DmResult_SUCCESS) {
+			return rv;
+		}
+	}
+
+	return DmResult_SUCCESS;
+}
+
+static DmResult DmPattern_generateMessages(DmPattern* slf,
+                                           DmStyle* sty,
+                                           DmMessage_Chord* chord,
+                                           uint32_t time,
+                                           uint32_t seq,
+                                           DmMessageQueue* out) {
+	int64_t variation[UINT8_MAX + 1];
+	memset(variation, -1, sizeof variation);
+
+	// 1. Select the variation IDs for each part
+	for (size_t i = 0; i < slf->parts.length; ++i) {
+		DmPartReference* pref = &slf->parts.data[i];
+		DmPart* part = DmStyle_findPart(sty, pref);
+
+		if (part == NULL) {
+			Dm_report(DmLogLevel_WARN, "DmPerformance: Part reference could not be resolved!");
+			continue;
+		}
+
+		// If this part is locked, or we have not yet select a variation for its lock id,
+		// select a new variation to play.
+		if (pref->variation_lock_id == 0 || variation[pref->variation_lock_id] == -1) {
+			switch (pref->random_variation) {
+			case DmVariation_SEQUENTIAL:
+				variation[pref->variation_lock_id] = seq;
+				break;
+			case DmVariation_RANDOM:
+				variation[pref->variation_lock_id] = rand();
+				break;
+			case DmVariation_RANDOM_START:
+				// TODO(lmichaelis): Implement this correctly. To do that, we need to store the previous
+				//                   variation id for each pattern somewhere and add the seq to it.
+				variation[pref->variation_lock_id] = seq;
+				break;
+			case DmVariation_NO_REPEAT:
+				// TODO(lmichaelis): Implement this correctly. To do that, we need to store the previous
+				//                   variation id for each pattern somewhere and compare it to the next value
+				variation[pref->variation_lock_id] = rand();
 				break;
 			}
 		}
 
-		// Now we are ready to create all the note on/note off messages
-		// for this pattern
-		for (size_t j = 0; j < part->note_count; ++j) {
-			DmNote note = part->notes[j];
+		uint32_t variation_id = (uint32_t) variation[pref->variation_lock_id];
+		variation_id = 1 << (variation_id % DmPart_getValidVariationCount(part));
 
-			// We ignore notes which do not correspond to the selected variation
-			if (!(note.variation & (uint32_t) variation)) {
-				continue;
+		// Now we need to select the correct sub-chord to use for the pattern
+		// by comparing against the sub-chord level of the pattern. By default,
+		// we just use the first one.
+		struct DmSubChord level = chord->subchords[0];
+		for (size_t j = 0; j < chord->subchord_count; ++j) {
+			if (chord->subchords[j].levels & (1 << pref->subchord_level)) {
+				level = chord->subchords[j];
+				break;
 			}
-
-			DmPlayModeFlags flags =
-			    note.play_mode_flags == DmPlayMode_NONE ? part->play_mode_flags : note.play_mode_flags;
-
-			int midi = -1;
-			if (flags == DmPlayMode_FIXED) {
-				midi = note.music_value;
-			} else {
-				midi = DmPerformance_musicValueToMidi(chord, flags, note.music_value);
-			}
-
-			if (midi < 0) {
-				// We were unable to convert the music value
-				Dm_report(DmLogLevel_WARN, "DmPerformance: Unable to convert music value %d to MIDI", note.music_value);
-				continue;
-			}
-
-			uint32_t time = Dm_getTimeOffset(note.grid_start, note.time_offset, part->time_signature);
-
-			if (note.time_range != 0) {
-				time += Dm_randRange(note.time_range);
-			}
-
-			uint32_t duration = note.duration;
-			if (note.duration_range != 0) {
-				time += Dm_randRange(note.duration_range);
-			}
-
-			uint32_t velocity = note.velocity;
-			if (note.velocity_range != 0) {
-				time += Dm_randRange(note.velocity_range);
-			}
-
-			DmMessage msg;
-			msg.type = DmMessage_NOTE;
-			msg.time = 0;
-
-			msg.note.on = true;
-			msg.note.note = (uint8_t) midi;
-			msg.note.velocity = (uint8_t) velocity;
-			msg.note.channel = pref->logical_part_id;
-
-			DmMessageQueue_add(&slf->music_queue, &msg, slf->time + time, DmQueueConflict_APPEND);
-
-			msg.note.on = false;
-			msg.note.note = (uint8_t) midi;
-
-			DmMessageQueue_add(&slf->music_queue, &msg, slf->time + time + duration, DmQueueConflict_APPEND);
 		}
 
-		for (size_t j = 0; j < part->curve_count; ++j) {
-			DmCurve curve = part->curves[j];
+		// Now we can create the actual messages for the pattern.
+		DmResult rv = DmPattern_generateNoteMessages(part, level, time, variation_id, pref->logical_part_id, out);
+		if (rv != DmResult_SUCCESS) {
+			return rv;
+		}
 
-			// We ignore notes which do not correspond to the selected variation
-			if (!(curve.variation & (uint32_t) variation)) {
-				continue;
-			}
-
-			// TODO(lmichaelis): Implement the other curve types!
-			if (curve.event_type != DmCurveType_CONTROL_CHANGE && curve.event_type != DmCurveType_PITCH_BEND) {
-				Dm_report(DmLogLevel_ERROR, "DmPerformance: Curve type %d is not supported", curve.event_type);
-				continue;
-			}
-
-			uint32_t start_time = Dm_getTimeOffset(curve.grid_start, curve.time_offset, part->time_signature);
-			uint32_t duration = curve.duration / 2;
-
-			int16_t start = curve.start_value;
-			int16_t end = curve.end_value;
-
-			// Some MIDI control curves have invalid ranges (e.g. -22000 to 127)
-			bool start_in_range = start >= 0 && start <= 127;
-			bool end_in_range = end >= 0 && end <= 127;
-			if (curve.event_type == DmCurveType_CONTROL_CHANGE && !(start_in_range && end_in_range)) {
-				Dm_report(DmLogLevel_DEBUG, "DmPerformance: Curve is out-of-range");
-				continue;
-			}
-
-			float prev_value = start;
-			// TODO(lmichaelis): Check whether this is actually correct!
-			for (uint32_t k = 0; k < (duration / DmInt_CURVE_SPACING); ++k) {
-				uint32_t offset = k * DmInt_CURVE_SPACING;
-				float phase = (float) offset / (float) duration;
-
-				float value = 0;
-				switch (curve.curve_shape) {
-				case DmCurveShape_LINEAR:
-					value = lerp(phase, start, end);
-					break;
-				case DmCurveShape_INSTANT:
-					value = end;
-					break;
-				case DmCurveShape_EXP:
-					value = lerp(powf(phase, 4), start, end);
-					break;
-				case DmCurveShape_LOG:
-					value = lerp(sqrtf(phase), start, end);
-					break;
-				case DmCurveShape_SINE:
-					value = lerp((sinf((phase - 0.5f) * (float) M_PI) + 1) * 0.5f, start, end);
-					break;
-				}
-
-				DmMessage msg;
-				msg.time = 0;
-
-				if (curve.event_type == DmCurveType_CONTROL_CHANGE) {
-					msg.type = DmMessage_CONTROL;
-					msg.control.control = curve.cc_data;
-					msg.control.channel = pref->logical_part_id;
-					msg.control.value = value / 127.f;
-					msg.control.reset = curve.flags & DmCurveFlags_RESET;
-					msg.control.reset_value = curve.reset_value / 127.f;
-
-					// Optimization: Don't emit a message if the value is the same as the previous one.
-					if (msg.control.value == prev_value) {
-						continue;
-					}
-
-					prev_value = msg.control.value;
-				} else if (curve.event_type == DmCurveType_PITCH_BEND) {
-					msg.type = DmMessage_PITCH_BEND;
-					msg.pitch_bend.value = (int) value;
-					msg.pitch_bend.channel = pref->logical_part_id;
-					msg.pitch_bend.reset = curve.flags & DmCurveFlags_RESET;
-					msg.pitch_bend.reset_value = (int) value;
-
-					// Optimization: Don't emit a message if the value is the same as the previous one.
-					if (msg.pitch_bend.value == (uint16_t) prev_value) {
-						continue;
-					}
-
-					prev_value = (float) msg.pitch_bend.value;
-				}
-
-				DmMessageQueue_add(&slf->music_queue, &msg, slf->time + start_time + offset, DmQueueConflict_APPEND);
-			}
+		rv = DmPattern_generateCurveMessages(part, time, variation_id, pref->logical_part_id, out);
+		if (rv != DmResult_SUCCESS) {
+			return rv;
 		}
 	}
 
+	return DmResult_SUCCESS;
+}
+
+static DmResult DmPerformance_playPattern(DmPerformance* slf, DmPattern* pttn) {
+	Dm_report(DmLogLevel_INFO,
+	          "DmPerformance: Playing pattern '%s' (measure %d, length %d)",
+	          pttn->info.unam,
+	          slf->time / Dm_getMeasureLength(slf->time_signature) + 1,
+	          pttn->length_measures);
+
+	// Stop any already playing pattern.
+	DmMessageQueue_clear(&slf->music_queue);
+	DmSynth_sendNoteOffEverything(&slf->synth);
+	DmSynth_reset(&slf->synth);
+
+	// Generate the new pattern's messages
+	DmResult rv =
+	    DmPattern_generateMessages(pttn, slf->style, &slf->chord, slf->time, slf->variation, &slf->music_queue);
+	if (rv != DmResult_SUCCESS) {
+		return rv;
+	}
+
+	// Schedule a new pattern to be played after this one if one is not already scheduled
 	DmMessage msg;
 	msg.type = DmMessage_COMMAND;
 	msg.command.command = DmCommand_GROOVE;
@@ -555,15 +642,15 @@ static void DmPerformance_playPattern(DmPerformance* slf, DmPattern* pttn) {
 	msg.command.measure = 0;
 
 	uint32_t pattern_length = Dm_getMeasureLength(slf->time_signature) * pttn->length_measures;
-	DmMessageQueue_add(&slf->music_queue, &msg, slf->time + pattern_length, DmQueueConflict_KEEP);
 
-	Dm_report(DmLogLevel_INFO,
-	          "DmPerformance: Playing pattern '%s' (measure %d, length %d)",
-	          pttn->info.unam,
-	          slf->time / Dm_getMeasureLength(slf->time_signature) + 1,
-	          pttn->length_measures);
+	// Will keep any existing command message and discard the new one.
+	rv = DmMessageQueue_add(&slf->music_queue, &msg, slf->time + pattern_length, DmQueueConflict_KEEP);
+	if (rv != DmResult_SUCCESS) {
+		return rv;
+	}
 
 	slf->variation += 1;
+	return DmResult_SUCCESS;
 }
 
 static void DmPerformance_handleCommandMessage(DmPerformance* slf, DmMessage_Command* msg) {
@@ -610,7 +697,7 @@ static void DmPerformance_handleSegmentMessage(DmPerformance* slf, DmMessage_Seg
 		return;
 	}
 
-	Dm_report(DmLogLevel_DEBUG,
+	Dm_report(DmLogLevel_INFO,
 	          "DmPerformance: Playing segment \"%s\" (repeat %d/%d)",
 	          msg->segment->info.unam,
 	          msg->loop + 1,
@@ -715,11 +802,11 @@ static void DmPerformance_handleMessage(DmPerformance* slf, DmMessage* msg) {
 		          "DmPerformance(Message): time=%d type=note-%s channel=%d value=%d velocity=%d",
 		          slf->time,
 		          msg->note.on ? "on" : "off",
-				  msg->note.channel,
+		          msg->note.channel,
 		          msg->note.note,
 		          msg->note.velocity);
 
-	if (msg->note.on) {
+		if (msg->note.on) {
 			DmSynth_sendNoteOn(&slf->synth, msg->note.channel, msg->note.note, msg->note.velocity);
 		} else {
 			DmSynth_sendNoteOff(&slf->synth, msg->note.channel, msg->note.note);
@@ -727,11 +814,11 @@ static void DmPerformance_handleMessage(DmPerformance* slf, DmMessage* msg) {
 		break;
 	case DmMessage_CONTROL:
 		Dm_report(DmLogLevel_TRACE,
-				  "DmPerformance(Message): time=%d type=control-change channel=%d control=%d value=%f",
-				  slf->time,
-				  msg->control.channel,
-				  msg->control.control,
-				  msg->control.value);
+		          "DmPerformance(Message): time=%d type=control-change channel=%d control=%d value=%f",
+		          slf->time,
+		          msg->control.channel,
+		          msg->control.control,
+		          msg->control.value);
 
 		DmSynth_sendControl(&slf->synth, msg->control.channel, msg->control.control, msg->control.value);
 
@@ -744,10 +831,10 @@ static void DmPerformance_handleMessage(DmPerformance* slf, DmMessage* msg) {
 		break;
 	case DmMessage_PITCH_BEND:
 		Dm_report(DmLogLevel_TRACE,
-				  "DmPerformance(Message): time=%d type=pitch-bend channel=%d value=%d",
-				  slf->time,
-				  msg->pitch_bend.channel,
-				  msg->pitch_bend.value);
+		          "DmPerformance(Message): time=%d type=pitch-bend channel=%d value=%d",
+		          slf->time,
+		          msg->pitch_bend.channel,
+		          msg->pitch_bend.value);
 
 		DmSynth_sendPitchBend(&slf->synth, msg->pitch_bend.channel, msg->pitch_bend.value);
 		if (msg->pitch_bend.reset) {
@@ -759,20 +846,6 @@ static void DmPerformance_handleMessage(DmPerformance* slf, DmMessage* msg) {
 		Dm_report(DmLogLevel_ERROR, "DmPerformance: Message type %d not implemented", msg->type);
 		break;
 	}
-}
-
-static uint32_t DmPerformance_getSampleCountFromDuration(DmPerformance* slf,
-                                                         uint32_t duration,
-                                                         uint32_t sample_rate,
-                                                         uint8_t channels) {
-	double pulses_per_sample = Dm_getTicksPerSample(slf->time_signature, slf->tempo, sample_rate) / channels;
-	return (uint32_t) (duration / pulses_per_sample);
-}
-
-static uint32_t
-DmPerformance_getDurationFromSampleCount(DmPerformance* slf, uint32_t samples, uint32_t sample_rate, uint8_t channels) {
-	double pulses_per_sample = Dm_getTicksPerSample(slf->time_signature, slf->tempo, sample_rate) / channels;
-	return (uint32_t) round(pulses_per_sample * samples);
 }
 
 DmResult DmPerformance_renderPcm(DmPerformance* slf, void* buf, size_t len, DmRenderOptions opts) {
@@ -821,7 +894,7 @@ DmResult DmPerformance_renderPcm(DmPerformance* slf, void* buf, size_t len, DmRe
 
 		uint32_t time_offset = (uint32_t) max_s32((int) msg.time - (int) slf->time, 0);
 		uint32_t offset_samples =
-		    DmPerformance_getSampleCountFromDuration(slf, time_offset, slf->sample_rate, channels);
+		    Dm_getSampleCountForDuration(time_offset, slf->time_signature, slf->tempo, slf->sample_rate, channels);
 
 		if (offset_samples > len - sample) {
 			// The next message does not fall into this render call (i.e. it happens after the number of
@@ -837,7 +910,11 @@ DmResult DmPerformance_renderPcm(DmPerformance* slf, void* buf, size_t len, DmRe
 		// same number of samples for each channel.
 		if ((opts & DmRender_STEREO)) {
 			offset_samples += offset_samples % 2;
-			time_offset = DmPerformance_getDurationFromSampleCount(slf, offset_samples, slf->sample_rate, channels);
+			time_offset = Dm_getDurationForSampleCount(offset_samples,
+			                                           slf->time_signature,
+			                                           slf->tempo,
+			                                           slf->sample_rate,
+			                                           channels);
 		}
 
 		// Render the samples from now until the message occurs and advance the buffer pointer
@@ -865,7 +942,8 @@ DmResult DmPerformance_renderPcm(DmPerformance* slf, void* buf, size_t len, DmRe
 	// Render the remaining samples
 	uint32_t remaining_samples = (uint32_t) (len - sample);
 	(void) DmSynth_render(&slf->synth, buf, remaining_samples, opts);
-	slf->time += DmPerformance_getDurationFromSampleCount(slf, remaining_samples, slf->sample_rate, channels);
+	slf->time +=
+	    Dm_getDurationForSampleCount(remaining_samples, slf->time_signature, slf->tempo, slf->sample_rate, channels);
 
 	return DmResult_SUCCESS;
 }

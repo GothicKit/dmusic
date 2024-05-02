@@ -2,6 +2,9 @@
 // SPDX-License-Identifier: MIT-Modern-Variant
 #include "_Internal.h"
 
+#include <math.h>
+#include <stdlib.h>
+
 enum {
 	DmInt_TICKS_PER_QUARTER_NOTE = 768,
 };
@@ -21,7 +24,6 @@ uint8_t min_u8(uint8_t a, uint8_t b) {
 float lerp(float x, float start, float end) {
 	return (1 - x) * start + x * end;
 }
-
 
 int32_t clamp_s32(int32_t val, int32_t min, int32_t max) {
 	if (val < min) {
@@ -45,6 +47,11 @@ float clamp_f32(float val, float min, float max) {
 	}
 
 	return val;
+}
+
+int32_t Dm_randRange(int32_t range) {
+	int32_t rnd = rand() % range;
+	return range - (rnd / 2);
 }
 
 DmCommandType Dm_embellishmentToCommand(DmEmbellishmentType embellishment) {
@@ -104,4 +111,22 @@ uint32_t Dm_getTimeOffset(uint32_t grid_start, int32_t time_offset, DmTimeSignat
 	uint32_t partial_beat_length = (grid_start % sig.grids_per_beat) * (beat_length / sig.grids_per_beat);
 
 	return (uint32_t) time_offset + full_beat_length + partial_beat_length;
+}
+
+uint32_t Dm_getSampleCountForDuration(uint32_t duration,
+                                      DmTimeSignature time_signature,
+                                      double tempo,
+                                      uint32_t sample_rate,
+                                      uint8_t channels) {
+	double pulses_per_sample = Dm_getTicksPerSample(time_signature, tempo, sample_rate) / channels;
+	return (uint32_t) (duration / pulses_per_sample);
+}
+
+uint32_t Dm_getDurationForSampleCount(uint32_t samples,
+                                      DmTimeSignature time_signature,
+                                      double tempo,
+                                      uint32_t sample_rate,
+                                      uint8_t channels) {
+	double pulses_per_sample = Dm_getTicksPerSample(time_signature, tempo, sample_rate) / channels;
+	return (uint32_t) round(pulses_per_sample * samples);
 }
