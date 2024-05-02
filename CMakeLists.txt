@@ -27,6 +27,7 @@ list(APPEND _DM_SOURCE
         src/_Riff.h
         src/Array.c
         src/Common.c
+        src/Composer.c
         src/Dls.c
         src/Band.c
         src/Loader.c

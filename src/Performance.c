@@ -853,106 +853,6 @@ DmResult DmPerformance_renderPcm(DmPerformance* slf, void* buf, size_t len, DmRe
 	return DmResult_SUCCESS;
 }
 
-static DmResult DmPerformance_composeTransition(DmPerformance* slf,
-                                                DmSegment* to,
-                                                DmEmbellishmentType embellishment,
-                                                DmSegment** out) {
-	DmResult rv = DmSegment_create(out);
-	if (rv != DmResult_SUCCESS) {
-		return rv;
-	}
-
-	DmSegment* trans = *out;
-	trans->repeats = 1;
-	trans->length = 0;
-	trans->play_start = 0;
-	trans->loop_start = 0;
-	trans->loop_end = trans->length;
-	trans->downloaded = true;
-	trans->info.unam = "Composed Transition";
-
-	// NOTE: We only support transitions of length 1 (measure)
-
-	DmMessage msg;
-	msg.time = 0;
-
-	if (embellishment != DmEmbellishment_NONE) {
-		msg.type = DmMessage_TEMPO;
-		msg.tempo.tempo = slf->style->tempo;
-		rv = DmMessageList_add(&trans->messages, msg);
-		if (rv != DmResult_SUCCESS) {
-			return rv;
-		}
-
-		msg.type = DmMessage_BAND;
-		msg.band.band = DmBand_retain(slf->band);
-		rv = DmMessageList_add(&trans->messages, msg);
-		if (rv != DmResult_SUCCESS) {
-			return rv;
-		}
-
-		msg.type = DmMessage_STYLE;
-		msg.style.style = DmStyle_retain(slf->style);
-		rv = DmMessageList_add(&trans->messages, msg);
-		if (rv != DmResult_SUCCESS) {
-			return rv;
-		}
-
-		msg.type = DmMessage_CHORD;
-		msg.chord = slf->chord;
-		rv = DmMessageList_add(&trans->messages, msg);
-		if (rv != DmResult_SUCCESS) {
-			return rv;
-		}
-
-		if (embellishment == DmEmbellishment_END_AND_INTRO) {
-			// Complex "extro" plus "intro" transitoon
-			msg.type = DmMessage_COMMAND;
-			msg.command.command = DmCommand_END;
-			msg.command.groove_level = slf->groove;
-			msg.command.groove_range = slf->groove_range;
-			msg.command.repeat_mode = DmPatternSelect_NO_REPEAT;
-			msg.command.beat = 0;
-			msg.command.measure = 0;
-			rv = DmMessageList_add(&trans->messages, msg);
-			if (rv != DmResult_SUCCESS) {
-				return rv;
-			}
-
-			trans->length = Dm_getMeasureLength(slf->time_signature);
-
-			// TODO(lmichaelis): implement "end-and-intro" transitions
-			Dm_report(DmLogLevel_WARN, "DmPerformance: Complex END_AND_INTRO transition is not yet supported. Only playing END");
-		} else {
-			// Basic "extro"-style transition
-			msg.type = DmMessage_COMMAND;
-			msg.command.command = Dm_embellishmentToCommand(embellishment);
-			msg.command.groove_level = slf->groove;
-			msg.command.groove_range = slf->groove_range;
-			msg.command.repeat_mode = DmPatternSelect_NO_REPEAT;
-			msg.command.beat = 0;
-			msg.command.measure = 0;
-			rv = DmMessageList_add(&trans->messages, msg);
-			if (rv != DmResult_SUCCESS) {
-				return rv;
-			}
-
-			trans->length = Dm_getMeasureLength(slf->time_signature);
-		}
-	}
-
-	msg.type = DmMessage_SEGMENT;
-	msg.time = trans->length;
-	msg.segment.segment = DmSegment_retain(to);
-	msg.segment.loop = 0;
-	rv = DmMessageList_add(&trans->messages, msg);
-	if (rv != DmResult_SUCCESS) {
-		return rv;
-	}
-
-	return DmResult_SUCCESS;
-}
-
 DmResult
 DmPerformance_playTransition(DmPerformance* slf, DmSegment* sgt, DmEmbellishmentType embellishment, DmTiming timing) {
 	if (slf == NULL || sgt == NULL) {
@@ -970,7 +870,7 @@ DmPerformance_playTransition(DmPerformance* slf, DmSegment* sgt, DmEmbellishment
 	}
 
 	DmSegment* transition = NULL;
-	DmResult rv = DmPerformance_composeTransition(slf, sgt, embellishment, &transition);
+	DmResult rv = Dm_composeTransition(slf->style, slf->band, &slf->chord, sgt, embellishment, &transition);
 	if (rv != DmResult_SUCCESS) {
 		return rv;
 	}

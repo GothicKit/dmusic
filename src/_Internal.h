@@ -634,3 +634,10 @@ DMINT void DmSynth_sendNoteOff(DmSynth* slf, uint32_t channel, uint8_t note);
 DMINT void DmSynth_sendNoteOffAll(DmSynth* slf, uint32_t channel);
 DMINT void DmSynth_sendNoteOffEverything(DmSynth* slf);
 DMINT size_t DmSynth_render(DmSynth* slf, void* buf, size_t len, DmRenderOptions fmt);
+
+DMINT DmResult Dm_composeTransition(DmStyle* sty,
+                                    DmBand* bnd,
+                                    DmMessage_Chord* chord,
+                                    DmSegment* sgt,
+                                    DmEmbellishmentType embellishment,
+                                    DmSegment** out);
