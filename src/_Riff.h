@@ -118,6 +118,8 @@ DMINT void DmInfo_parse(DmInfo* slf, DmRiff* rif);
 DMINT void DmVersion_parse(DmVersion* slf, DmRiff* rif);
 DMINT void DmReference_parse(DmReference* slf, DmRiff* rif);
 
+DMINT char* Dm_utf16ToUtf8Inline(char* out, char16_t const* u16);
+
 DMINT bool DmRiff_init(DmRiff* slf, void const* buf, size_t len);
 DMINT bool DmRiff_is(DmRiff const* slf, uint32_t id, uint32_t typ);
 DMINT bool DmRiff_readChunk(DmRiff* slf, DmRiff* out);

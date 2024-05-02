@@ -101,7 +101,10 @@ static void DmSegment_parseChordItem(DmMessage_Chord* slf, DmRiff* rif) {
 	{
 		uint32_t end_position = rif->pos + item_size;
 
-		DmRiff_read(rif, slf->name, sizeof slf->name);
+		char16_t name[16];
+		DmRiff_read(rif, name, sizeof name);
+		(void) Dm_utf16ToUtf8Inline(slf->name, name);
+
 		DmRiff_readDword(rif, &slf->time);
 		DmRiff_readWord(rif, &slf->measure);
 		DmRiff_readByte(rif, &slf->beat);

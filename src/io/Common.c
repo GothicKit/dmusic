@@ -9,7 +9,7 @@ void DmGuid_parse(DmGuid* slf, DmRiff* rif) {
 	DmRiff_read(rif, slf->data, sizeof slf->data);
 }
 
-static char* Dm_utf16ToUtf8Inline(char* out, char16_t const* u16) {
+char* Dm_utf16ToUtf8Inline(char* out, char16_t const* u16) {
 	size_t len = 0;
 	while (u16[len] != 0) {
 		len += 1;

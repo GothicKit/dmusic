@@ -150,18 +150,18 @@ static uint8_t bit_count(uint32_t v) {
 
 static uint32_t fixup_scale(uint32_t scale, uint8_t scale_root) {
 	uint32_t const FALLBACK_SCALES[12] = {
-		0xab5ab5,
-		0x6ad6ad,
-		0x5ab5ab,
-		0xad5ad5,
-		0x6b56b5,
-		0x5ad5ad,
-		0x56b56b,
-		0xd5ad5a,
-		0xb56b56,
-		0xd6ad6a,
-		0xb5ab5a,
-		0xad6ad6,
+	    0xab5ab5,
+	    0x6ad6ad,
+	    0x5ab5ab,
+	    0xad5ad5,
+	    0x6b56b5,
+	    0x5ad5ad,
+	    0x56b56b,
+	    0xd5ad5a,
+	    0xb56b56,
+	    0xd6ad6a,
+	    0xb5ab5a,
+	    0xad6ad6,
 	};
 
 	// Force the scale to be exactly two octaves wide by zero-ing out the upper octave and
@@ -582,167 +582,181 @@ static void DmPerformance_handleCommandMessage(DmPerformance* slf, DmMessage_Com
 
 	DmPattern* pttn = DmStyle_getRandomPattern(slf->style, slf->groove, msg->command);
 	if (pttn == NULL) {
-		Dm_report(DmLogLevel_WARN, "DmPerformance: No suitable pattern found. Silence ensues ...", msg->command);
+		Dm_report(DmLogLevel_INFO, "DmPerformance: No suitable pattern found. Silence ensues ...", msg->command);
 		return;
 	}
 
 	DmPerformance_playPattern(slf, pttn);
 }
 
+static void DmPerformance_handleSegmentMessage(DmPerformance* slf, DmMessage_SegmentChange* msg) {
+	DmSegment* sgt = msg->segment;
+	DmSegment_release(slf->segment);
+
+	// Get rid of the currently playing segment.
+	DmMessageQueue_clear(&slf->control_queue);
+	DmMessageQueue_clear(&slf->music_queue);
+	DmSynth_sendNoteOffEverything(&slf->synth);
+
+	// If a `NULL`-segment is provided, simply stop the playing segment!
+	if (sgt == NULL) {
+		DmStyle_release(slf->style);
+		DmBand_release(slf->band);
+
+		slf->time = 0;
+		slf->style = NULL;
+		slf->segment = NULL;
+		slf->band = NULL;
+		return;
+	}
+
+	Dm_report(DmLogLevel_DEBUG,
+	          "DmPerformance: Playing segment \"%s\" (repeat %d/%d)",
+	          msg->segment->info.unam,
+	          msg->loop + 1,
+	          msg->segment->repeats);
+
+	// Reset the time to combat drift
+	slf->time = 0;
+
+	// Import all the new segment's messages
+	// NOTE: If we have a different `play_start` or `loop_start`, we need to discard messages
+	//       before it and make sure to re-align them at time 0.
+	uint32_t start = msg->loop != 0 ? sgt->loop_start : sgt->play_start;
+	uint32_t end = msg->loop != 0 ? sgt->loop_end : sgt->length;
+
+	for (size_t i = 0; i < sgt->messages.length; ++i) {
+		DmMessage* m = &sgt->messages.data[i];
+
+		// Messages occur before the indicated start offset or after the end offset are cut out.
+		if (m->time < start || m->time > end) {
+			continue;
+		}
+
+		// The message starts at the indicated message's time but aligned at zero based on the start offset.
+		uint32_t mt = slf->time + m->time - start;
+
+		DmMessageQueue_add(&slf->control_queue, m, mt, DmQueueConflict_REPLACE);
+	}
+
+	slf->segment = DmSegment_retain(sgt);
+	slf->segment_start = slf->time;
+
+	// If required, schedule to loop this segment.
+	if (msg->loop < sgt->repeats) {
+		DmMessage m;
+		m.type = DmMessage_SEGMENT;
+		m.time = 0;
+		m.segment.segment = sgt;
+		m.segment.loop = msg->loop + 1;
+
+		DmMessageQueue_add(&slf->control_queue, &m, slf->time + slf->segment->length, DmQueueConflict_KEEP);
+	}
+}
+
 static void DmPerformance_handleMessage(DmPerformance* slf, DmMessage* msg) {
 	switch (msg->type) {
-	case DmMessage_SEGMENT: {
-		// TODO(lmichaelis): The segment in this message might no longer be valid, since we
-		// have called `pop` on the queue but not kept a strong reference to the message!
-		DmSegment* sgt = msg->segment.segment;
-
-		DmMessageQueue_clear(&slf->control_queue);
-		DmMessageQueue_clear(&slf->music_queue);
-		DmSynth_sendNoteOffEverything(&slf->synth);
-
-		// If a `NULL`-segment is provided, simply stop the playing segment!
-		if (sgt == NULL) {
-			DmSegment_release(slf->segment);
-			DmStyle_release(slf->style);
-			DmBand_release(slf->band);
-
-			slf->time = 0;
-			slf->style = NULL;
-			slf->segment = NULL;
-			slf->band = NULL;
-			break;
-		}
-
-		Dm_report(DmLogLevel_DEBUG,
-		          "DmPerformance: MESSAGE time=%d msg=segment-change segment=\"%s\"",
+	case DmMessage_SEGMENT:
+		Dm_report(DmLogLevel_TRACE,
+		          "DmPerformance(Message): time=%d type=segment-change name=\"%s\"",
 		          slf->time,
 		          msg->segment.segment->info.unam);
-		Dm_report(DmLogLevel_DEBUG,
-		          "DmPerformance: Playing segment \"%s\" (repeat %d/%d)",
-		          msg->segment.segment->info.unam,
-		          msg->segment.loop + 1,
-		          msg->segment.segment->repeats);
 
-		// Reset the time to combat drift
-		uint32_t loop_offset = msg->segment.loop > 0 ? sgt->loop_start : 0;
-		slf->time = 0;
-
-		for (size_t i = 0; i < sgt->messages.length; ++i) {
-			DmMessage* m = &sgt->messages.data[i];
-
-			if (msg->segment.loop == 0 && m->time < sgt->play_start) {
-				continue;
-			}
-
-			if (msg->segment.loop > 0 && (m->time < sgt->loop_start || m->time > sgt->loop_end)) {
-				continue;
-			}
-
-			DmMessageQueue_add(&slf->control_queue, m, slf->time + m->time - loop_offset, DmQueueConflict_REPLACE);
-		}
-
-		DmSegment_release(slf->segment);
-		slf->segment = DmSegment_retain(sgt);
-		slf->segment_start = slf->time;
-
-		if (msg->segment.loop < sgt->repeats) {
-			DmMessage m;
-			m.type = DmMessage_SEGMENT;
-			m.time = 0;
-			m.segment.segment = sgt;
-			m.segment.loop = msg->segment.loop + 1;
-
-			DmMessageQueue_add(&slf->control_queue, &m, slf->time + slf->segment->length, DmQueueConflict_KEEP);
-		}
+		DmPerformance_handleSegmentMessage(slf, &msg->segment);
 		break;
-	}
 	case DmMessage_STYLE:
-		// TODO(lmichaelis): The style in this message might have already been de-allocated!
+		Dm_report(DmLogLevel_TRACE,
+		          "DmPerformance(Message): time=%d type=style-change name=\"%s\"",
+		          slf->time,
+		          msg->style.style->info.unam);
+
 		DmStyle_release(slf->style);
 		slf->style = DmStyle_retain(msg->style.style);
 		slf->time_signature = slf->style->time_signature;
-		Dm_report(DmLogLevel_DEBUG,
-		          "DmPerformance: MESSAGE time=%d msg=style-change style=\"%s\"",
-		          slf->time,
-		          msg->style.style->info.unam);
 		break;
 	case DmMessage_BAND:
-		// TODO(lmichaelis): The band in this message might have already been de-allocated!
+		Dm_report(DmLogLevel_TRACE,
+		          "DmPerformance(Message): time=%d type=band-change name=\"%s\"",
+		          slf->time,
+		          msg->band.band->info.unam);
+
 		DmBand_release(slf->band);
 		slf->band = DmBand_retain(msg->band.band);
 		DmSynth_sendBandUpdate(&slf->synth, msg->band.band);
-		Dm_report(DmLogLevel_DEBUG,
-		          "DmPerformance: MESSAGE time=%d msg=band-change band=\"%s\"",
-		          slf->time,
-		          msg->band.band->info.unam);
 		break;
 	case DmMessage_TEMPO:
-		slf->tempo = msg->tempo.tempo;
-		Dm_report(DmLogLevel_DEBUG,
-		          "DmPerformance: MESSAGE time=%d msg=tempo-change tempo=%f",
+		Dm_report(DmLogLevel_TRACE,
+		          "DmPerformance(Message): time=%d type=tempo-change value=%f",
 		          slf->time,
 		          msg->tempo.tempo);
+
+		slf->tempo = msg->tempo.tempo;
 		break;
 	case DmMessage_COMMAND:
-		DmPerformance_handleCommandMessage(slf, &msg->command);
-		Dm_report(DmLogLevel_DEBUG,
-		          "DmPerformance: MESSAGE time=%d msg=command kind=%d groove=%d (+/- %d)",
+		Dm_report(DmLogLevel_TRACE,
+		          "DmPerformance(Message): time=%d type=command-change value=%d groove=%d groove-range=%d",
 		          slf->time,
 		          msg->command.command,
 		          msg->command.groove_level,
-		          msg->command.groove_range / 2);
+		          msg->command.groove_range);
+
+		DmPerformance_handleCommandMessage(slf, &msg->command);
 		break;
 	case DmMessage_CHORD:
+		Dm_report(DmLogLevel_TRACE,
+		          "DmPerformance(Message): time=%d type=chord-change name=\"%s\"",
+		          slf->time,
+		          msg->chord.name);
+
 		slf->chord = msg->chord;
-		Dm_report(DmLogLevel_DEBUG, "DmPerformance: MESSAGE time=%d msg=chord-change", slf->time);
 		break;
 	case DmMessage_NOTE:
-		if (msg->note.on) {
+		Dm_report(DmLogLevel_TRACE,
+		          "DmPerformance(Message): time=%d type=note-%s channel=%d value=%d velocity=%d",
+		          slf->time,
+		          msg->note.on ? "on" : "off",
+				  msg->note.channel,
+		          msg->note.note,
+		          msg->note.velocity);
+
+	if (msg->note.on) {
 			DmSynth_sendNoteOn(&slf->synth, msg->note.channel, msg->note.note, msg->note.velocity);
-			Dm_report(DmLogLevel_TRACE,
-			          "DmPerformance: MESSAGE time=%d msg=note-on note=%d channel=%d velocity=%d",
-			          slf->time,
-			          (int) msg->note.note,
-			          msg->note.channel,
-			          msg->note.velocity);
 		} else {
 			DmSynth_sendNoteOff(&slf->synth, msg->note.channel, msg->note.note);
-			Dm_report(DmLogLevel_TRACE,
-			          "DmPerformance: MESSAGE time=%d msg=note-off note=%d channel=%d",
-			          slf->time,
-			          (int) msg->note.note,
-			          msg->note.channel);
 		}
 		break;
 	case DmMessage_CONTROL:
+		Dm_report(DmLogLevel_TRACE,
+				  "DmPerformance(Message): time=%d type=control-change channel=%d control=%d value=%f",
+				  slf->time,
+				  msg->control.channel,
+				  msg->control.control,
+				  msg->control.value);
+
 		DmSynth_sendControl(&slf->synth, msg->control.channel, msg->control.control, msg->control.value);
+
 		if (msg->control.reset) {
 			DmSynth_sendControlReset(&slf->synth, msg->control.channel, msg->control.control, msg->control.reset_value);
 		} else {
 			DmSynth_sendControlReset(&slf->synth, msg->control.channel, msg->control.control, msg->control.value);
 		}
 
-		Dm_report(DmLogLevel_TRACE,
-		          "DmPerformance: MESSAGE time=%d msg=control channel=%d control=%d value=%f",
-		          slf->time,
-		          msg->control.channel,
-		          msg->control.control,
-		          msg->control.value);
 		break;
 	case DmMessage_PITCH_BEND:
+		Dm_report(DmLogLevel_TRACE,
+				  "DmPerformance(Message): time=%d type=pitch-bend channel=%d value=%d",
+				  slf->time,
+				  msg->pitch_bend.channel,
+				  msg->pitch_bend.value);
+
 		DmSynth_sendPitchBend(&slf->synth, msg->pitch_bend.channel, msg->pitch_bend.value);
 		if (msg->pitch_bend.reset) {
 			DmSynth_sendPitchBendReset(&slf->synth, msg->pitch_bend.channel, msg->pitch_bend.reset_value);
 		}
 
-		Dm_report(DmLogLevel_TRACE,
-		          "DmPerformance: MESSAGE time=%d channel=%d msg=pitch-bend value=%d",
-		          slf->time,
-		          msg->pitch_bend.channel,
-		          msg->pitch_bend.value);
 		break;
 	default:
-		Dm_report(DmLogLevel_INFO, "DmPerformance: Message type %d not implemented", msg->type);
+		Dm_report(DmLogLevel_ERROR, "DmPerformance: Message type %d not implemented", msg->type);
 		break;
 	}
 }
@@ -806,7 +820,8 @@ DmResult DmPerformance_renderPcm(DmPerformance* slf, void* buf, size_t len, DmRe
 		DmMessage_copy(ok_ctrl ? &msg_ctrl : &msg_midi, &msg, -1);
 
 		uint32_t time_offset = (uint32_t) max_s32((int) msg.time - (int) slf->time, 0);
-		uint32_t offset_samples = DmPerformance_getSampleCountFromDuration(slf, time_offset, slf->sample_rate, channels);
+		uint32_t offset_samples =
+		    DmPerformance_getSampleCountFromDuration(slf, time_offset, slf->sample_rate, channels);
 
 		if (offset_samples > len - sample) {
 			// The next message does not fall into this render call (i.e. it happens after the number of

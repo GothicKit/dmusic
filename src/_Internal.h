@@ -365,7 +365,7 @@ typedef struct DmMessage_Chord {
 	DmMessageType type;
 	uint32_t time;
 
-	char16_t name[16];
+	char name[32];
 	uint16_t measure;
 	uint8_t beat;
 	bool silent;
