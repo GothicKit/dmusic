@@ -338,6 +338,11 @@ static int DmPerformance_musicValueToMidi(struct DmSubChord chord, DmPlayModeFla
 
 #define DmInt_CURVE_SPACING 5
 
+static int32_t Dm_randRange(int32_t range) {
+	int32_t rnd = rand() % range;
+	return range - (rnd / 2);
+}
+
 static void DmPerformance_playPattern(DmPerformance* slf, DmPattern* pttn) {
 	DmMessageQueue_clear(&slf->music_queue);
 	DmSynth_sendNoteOffEverything(&slf->synth);
@@ -420,22 +425,17 @@ static void DmPerformance_playPattern(DmPerformance* slf, DmPattern* pttn) {
 			uint32_t time = Dm_getTimeOffset(note.grid_start, note.time_offset, part->time_signature);
 
 			if (note.time_range != 0) {
-				uint32_t range = note.time_range;
-				uint32_t rnd = (uint32_t) rand() % range;
-				time -= range - (rnd / 2);
+				time += Dm_randRange(note.time_range);
 			}
 
 			uint32_t duration = note.duration;
 			if (note.duration_range != 0) {
-				uint32_t range = note.duration_range;
-				uint32_t rnd = (uint32_t) rand() % range;
-				duration -= range - (rnd / 2);
+				time += Dm_randRange(note.duration_range);
 			}
 
 			uint32_t velocity = note.velocity;
 			if (note.velocity_range != 0) {
-				uint32_t rnd = (uint32_t) rand() % note.velocity_range;
-				velocity -= note.velocity_range - (rnd / 2);
+				time += Dm_randRange(note.velocity_range);
 			}
 
 			DmMessage msg;
@@ -573,9 +573,8 @@ static void DmPerformance_handleCommandMessage(DmPerformance* slf, DmMessage_Com
 
 		// Randomize the groove level
 		if (msg->groove_range != 0) {
-			int rnd = rand() % msg->groove_range;
-			int range = rnd - (msg->groove_range / 2);
-			slf->groove = (uint8_t) max_s32(msg->groove_level + range, 0);
+			int32_t new_groove = slf->groove + Dm_randRange(msg->groove_range);
+			slf->groove = max_s32(new_groove, 0);
 		}
 	} else if (msg->command == DmCommand_END_AND_INTRO) {
 		Dm_report(DmLogLevel_WARN, "DmPerformance: Command message with command %d not implemented", msg->command);
