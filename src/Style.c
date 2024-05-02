@@ -110,7 +110,7 @@ DmPattern* DmStyle_getRandomPattern(DmStyle* slf, uint32_t groove, DmCommandType
 	//                   have some way of defining how to select the pattern if more than 1 choice is available
 	//                   but I couldn't find it.
 
-	int32_t index = rand() % slf->patterns.length;
+	int64_t index = Dm_rand() % (uint32_t) slf->patterns.length;
 	do {
 		for (size_t i = 0; i < slf->patterns.length; ++i) {
 			DmPattern* pttn = &slf->patterns.data[i];

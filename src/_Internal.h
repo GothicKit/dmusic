@@ -562,6 +562,7 @@ struct DmPerformance {
 DMINT void* Dm_alloc(size_t len);
 DMINT void Dm_free(void* ptr);
 DMINT void Dm_report(DmLogLevel lvl, char const* fmt, ...);
+DMINT uint32_t Dm_rand(void);
 
 DMINT size_t max_usize(size_t a, size_t b);
 DMINT int32_t max_s32(int32_t a, int32_t b);

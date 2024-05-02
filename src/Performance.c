@@ -568,7 +568,7 @@ static DmResult DmPattern_generateMessages(DmPattern* slf,
 				variation[pref->variation_lock_id] = seq;
 				break;
 			case DmVariation_RANDOM:
-				variation[pref->variation_lock_id] = rand();
+				variation[pref->variation_lock_id] = Dm_rand();
 				break;
 			case DmVariation_RANDOM_START:
 				// TODO(lmichaelis): Implement this correctly. To do that, we need to store the previous
@@ -578,7 +578,7 @@ static DmResult DmPattern_generateMessages(DmPattern* slf,
 			case DmVariation_NO_REPEAT:
 				// TODO(lmichaelis): Implement this correctly. To do that, we need to store the previous
 				//                   variation id for each pattern somewhere and compare it to the next value
-				variation[pref->variation_lock_id] = rand();
+				variation[pref->variation_lock_id] = Dm_rand();
 				break;
 			}
 		}

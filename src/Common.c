@@ -50,8 +50,8 @@ float clamp_f32(float val, float min, float max) {
 }
 
 int32_t Dm_randRange(int32_t range) {
-	int32_t rnd = rand() % range;
-	return range - (rnd / 2);
+	uint32_t rnd = Dm_rand() % range;
+	return range - (int32_t) (rnd / 2);
 }
 
 DmCommandType Dm_embellishmentToCommand(DmEmbellishmentType embellishment) {

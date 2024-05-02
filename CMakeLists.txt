@@ -36,6 +36,7 @@ list(APPEND _DM_SOURCE
         src/Message.c
         src/Performance.c
         src/Riff.c
+        src/Rng.c
         src/Segment.c
         src/Style.c
         src/Synth.c

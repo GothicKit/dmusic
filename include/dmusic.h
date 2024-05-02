@@ -101,6 +101,34 @@ typedef void DmMemoryFree(void* ctx, void* ptr);
 /// \see DmMemoryFree De-allocation function definition.
 DMAPI DmResult Dm_setHeapAllocator(DmMemoryAlloc* alloc, DmMemoryFree* free, void* ctx);
 
+/// \brief A `rand_r`-like random number generation function.
+///
+/// Generates a random number between 0 and UINT32_MAX. Functions implementing this interface must be
+/// thread-safe. The function is not required to produce different numbers upon invocation and it does
+/// not need to be cryptographically safe. Calling a function implementing this interface should be
+/// inexpensive.
+///
+/// \param ctx[in] An arbitrary pointer provided when calling #Dm_setRandomNumberGenerator.
+/// \return A random number between 0 and UINT32_MAX.
+/// \see Dm_setRandomNumberGenerator
+typedef uint32_t DmRng(void* ctx);
+
+/// \brief Set the random number generator to use internally.
+///
+/// The given random number generator is sampled every time the library requires a random number. This includes
+/// but is not limited to:
+///
+///  * Selecting the next pattern to be played,
+///  * selecting the next note/curve variation and
+///  * applying random note offsets
+///
+/// \param rng[in] A pointer to a function to use as a random number generator or `NULL`
+///                to reset to the default random number generator.
+/// \param ctx[in] An arbitrary pointer passed to \p rng on every invocation.
+///
+/// \see DmRng Requirements for the random number generator
+DMAPI void Dm_setRandomNumberGenerator(DmRng* rng, void* ctx);
+
 /// \brief The set of message levels supported by the logging facilities.
 typedef enum DmLogLevel {
 	/// \brief The log message indicates a fatal error.
