@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT-Modern-Variant
 #include "_Internal.h"
 
-void DmMessage_copy(DmMessage* slf, DmMessage* cpy, uint32_t time) {
+void DmMessage_copy(DmMessage* slf, DmMessage* cpy, int64_t time) {
 	if (slf == NULL || cpy == NULL) {
 		return;
 	}
@@ -15,7 +15,9 @@ void DmMessage_copy(DmMessage* slf, DmMessage* cpy, uint32_t time) {
 		cpy->style.style = DmStyle_retain(slf->style.style);
 	}
 
-	cpy->time = time;
+	if (time >= 0) {
+		cpy->time = time;
+	}
 }
 
 void DmMessage_free(DmMessage* slf) {

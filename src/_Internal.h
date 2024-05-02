@@ -20,7 +20,7 @@ typedef enum DmResolveFlags {
 	DmResolve_AFTER_LATENCY_TIME = 1 << 22,
 	DmResolve_GRID = 1 << 11,
 	DmResolve_BEAT = 1 << 12,
-	DmResolve_MEASURE =1 << 13,
+	DmResolve_MEASURE = 1 << 13,
 	DmResolve_MARKER = 1 << 24,
 	DmResolve_SEGMENT_END = 1 << 23,
 } DmResolveFlags;
@@ -583,7 +583,7 @@ DMINT DmResult DmLoader_getDownloadableSound(DmLoader* slf, DmReference const* r
 DMINT DmResult DmSegment_create(DmSegment** slf);
 DMINT DmResult DmSegment_parse(DmSegment* slf, void* buf, size_t len);
 
-DMINT void DmMessage_copy(DmMessage* slf, DmMessage* cpy, uint32_t time);
+DMINT void DmMessage_copy(DmMessage* slf, DmMessage* cpy, int64_t time);
 DMINT void DmMessage_free(DmMessage* slf);
 DMINT DmResult DmMessageQueue_init(DmMessageQueue* slf);
 DMINT void DmMessageQueue_free(DmMessageQueue* slf);

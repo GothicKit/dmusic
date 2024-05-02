@@ -803,8 +803,10 @@ DmResult DmPerformance_renderPcm(DmPerformance* slf, void* buf, size_t len, DmRe
 			(void) mtx_unlock(&slf->mod_lock);
 		}
 
-		DmMessage* msg = ok_ctrl ? &msg_ctrl : &msg_midi;
-		uint32_t time_offset = (uint32_t) max_s32((int) msg->time - (int) slf->time, 0);
+		DmMessage msg;
+		DmMessage_copy(ok_ctrl ? &msg_ctrl : &msg_midi, &msg, -1);
+
+		uint32_t time_offset = (uint32_t) max_s32((int) msg.time - (int) slf->time, 0);
 		uint32_t offset_samples = DmPerformance_getSampleCountFromDuration(slf, time_offset, slf->sample_rate, channels);
 
 		if (offset_samples > len - sample) {
@@ -842,7 +844,8 @@ DmResult DmPerformance_renderPcm(DmPerformance* slf, void* buf, size_t len, DmRe
 			DmMessageQueue_pop(&slf->music_queue);
 		}
 
-		DmPerformance_handleMessage(slf, msg);
+		DmPerformance_handleMessage(slf, &msg);
+		DmMessage_free(&msg);
 	}
 
 	// Render the remaining samples
