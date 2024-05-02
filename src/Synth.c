@@ -93,6 +93,7 @@ static DmResult DmSynth_updateFonts(DmSynth* slf, DmBand* band) {
 	return DmResult_SUCCESS;
 }
 
+// See https://documentation.help/DirectMusic/usingbands.htm
 static DmResult DmSynth_assignInstrumentChannels(DmSynth* slf, DmBand* band) {
 	// Calculate the number of required performance channels
 	size_t channel_count = 0;
@@ -117,23 +118,31 @@ static DmResult DmSynth_assignInstrumentChannels(DmSynth* slf, DmBand* band) {
 		slf->channels_len = channel_count;
 	}
 
-	// Clear existing channels.
-	memset(slf->channels, 0, sizeof(DmSynthChannel*) * slf->channels_len);
-
 	// Assign the instrument to each channel.
+	// NOTE: We do not clear existing channels since that is what the band change spec requires.
+	//       Essentially, existing channels stay as-is and only the channels from the new band
+	//       are adjusted (if required).
 	for (size_t i = 0; i < band->instruments_len; ++i) {
 		DmInstrument* ins = &band->instruments[i];
+
 		if (ins->dls == NULL) {
 			continue;
 		}
 
+		DmSynthChannel* chan = &slf->channels[ins->channel];
+
+		// If this is the first time we're initializing the channel,
+		// set the reset fields to the default values.
+		if (chan->font == NULL) {
+			chan->reset_volume = DmInt_VOLUME_MAX;
+			chan->reset_pan = DmInt_PAN_CENTER;
+			chan->reset_pitch = DmInt_PITCH_BEND_NEUTRAL;
+			chan->transpose = 0;
+		}
+
 		DmSynthFont* fnt = DmSynth_getFont(slf, ins);
-		slf->channels[ins->channel].font = fnt;
-		slf->channels[ins->channel].channel = ins->channel;
-		slf->channels[ins->channel].reset_volume = DmInt_VOLUME_MAX;
-		slf->channels[ins->channel].reset_pan = DmInt_PAN_CENTER;
-		slf->channels[ins->channel].reset_pitch = DmInt_PITCH_BEND_NEUTRAL;
-		slf->channels[ins->channel].transpose = 0;
+		chan->font = fnt;
+		chan->channel = ins->channel;
 
 		if (fnt == NULL) {
 			continue;
@@ -144,19 +153,21 @@ static DmResult DmSynth_assignInstrumentChannels(DmSynth* slf, DmBand* band) {
 
 		tsf_channel_set_bank_preset(fnt->syn, ins->channel, bank, patch);
 
-		// Set the instrument's properties
+		// Update the instrument's properties
 		if (ins->options & DmInstrument_VALID_PAN) {
-			tsf_channel_set_pan(fnt->syn, ins->channel, (float) ins->pan / (float) DmInt_MIDI_MAX);
-			slf->channels[ins->channel].reset_pan = (float) ins->pan / (float) DmInt_MIDI_MAX;
+			float pan = (float) ins->pan / (float) DmInt_MIDI_MAX;
+			tsf_channel_set_pan(fnt->syn, ins->channel, pan);
+			chan->reset_pan = pan;
 		}
 
 		if (ins->options & DmInstrument_VALID_VOLUME) {
-			tsf_channel_set_volume(fnt->syn, ins->channel, (float) ins->volume / DmInt_MIDI_MAX);
-			slf->channels[ins->channel].reset_volume = (float) ins->volume / (float) DmInt_MIDI_MAX;
+			float vol = (float) ins->volume / DmInt_MIDI_MAX;
+			tsf_channel_set_volume(fnt->syn, ins->channel, vol);
+			chan->reset_volume = vol;
 		}
 
 		if (ins->options & DmInstrument_VALID_TRANSPOSE) {
-			slf->channels[ins->channel].transpose = ins->transpose;
+			chan->transpose = ins->transpose;
 		}
 	}
 
