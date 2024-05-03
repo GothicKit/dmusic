@@ -73,44 +73,44 @@ typedef pthread_once_t once_flag;
 
 /* ---- thread management ---- */
 
-int thrd_create(thrd_t* thr, thrd_start_t func, void* arg);
-void thrd_exit(int res);
+DMINT int thrd_create(thrd_t* thr, thrd_start_t func, void* arg);
+DMINT void thrd_exit(int res);
 
-int thrd_join(thrd_t thr, int* res);
-int thrd_detach(thrd_t thr);
-thrd_t thrd_current(void);
-int thrd_equal(thrd_t a, thrd_t b);
-int thrd_sleep(const struct timespec* ts_in, struct timespec* rem_out);
-void thrd_yield(void);
+DMINT int thrd_join(thrd_t thr, int* res);
+DMINT int thrd_detach(thrd_t thr);
+DMINT thrd_t thrd_current(void);
+DMINT int thrd_equal(thrd_t a, thrd_t b);
+DMINT int thrd_sleep(const struct timespec* ts_in, struct timespec* rem_out);
+DMINT void thrd_yield(void);
 
 /* ---- mutexes ---- */
 
-int mtx_init(mtx_t* mtx, int type);
-void mtx_destroy(mtx_t* mtx);
-int mtx_lock(mtx_t* mtx);
-int mtx_trylock(mtx_t* mtx);
-int mtx_timedlock(mtx_t* mtx, const struct timespec* ts);
-int mtx_unlock(mtx_t* mtx);
+DMINT int mtx_init(mtx_t* mtx, int type);
+DMINT void mtx_destroy(mtx_t* mtx);
+DMINT int mtx_lock(mtx_t* mtx);
+DMINT int mtx_trylock(mtx_t* mtx);
+DMINT int mtx_timedlock(mtx_t* mtx, const struct timespec* ts);
+DMINT int mtx_unlock(mtx_t* mtx);
 
 /* ---- condition variables ---- */
 
-int cnd_init(cnd_t* cond);
-void cnd_destroy(cnd_t* cond);
-int cnd_signal(cnd_t* cond);
-int cnd_broadcast(cnd_t* cond);
-int cnd_wait(cnd_t* cond, mtx_t* mtx);
-int cnd_timedwait(cnd_t* cond, mtx_t* mtx, const struct timespec* ts);
+DMINT int cnd_init(cnd_t* cond);
+DMINT void cnd_destroy(cnd_t* cond);
+DMINT int cnd_signal(cnd_t* cond);
+DMINT int cnd_broadcast(cnd_t* cond);
+DMINT int cnd_wait(cnd_t* cond, mtx_t* mtx);
+DMINT int cnd_timedwait(cnd_t* cond, mtx_t* mtx, const struct timespec* ts);
 
 /* ---- thread-specific data ---- */
 
-int tss_create(tss_t* key, tss_dtor_t dtor);
-void tss_delete(tss_t key);
-int tss_set(tss_t key, void* val);
-void* tss_get(tss_t key);
+DMINT int tss_create(tss_t* key, tss_dtor_t dtor);
+DMINT void tss_delete(tss_t key);
+DMINT int tss_set(tss_t key, void* val);
+DMINT void* tss_get(tss_t key);
 
 /* ---- misc ---- */
 
-void call_once(once_flag* flag, void (*func)(void));
+DMINT void call_once(once_flag* flag, void (*func)(void));
 
 #else /* C11THREADS_WIN32 */
 
@@ -188,52 +188,52 @@ struct timespec {
 
 /* Thread functions. */
 
-int thrd_create(thrd_t* thr, thrd_start_t func, void* arg);
+DMINT int thrd_create(thrd_t* thr, thrd_start_t func, void* arg);
 /* Win32: Threads not created with thrd_create() need to call this to clean up TSS. */
-C11THREADS_MSVC_NORETURN void thrd_exit(int res) C11THREADS_GNUC_NORETURN;
-int thrd_join(thrd_t thr, int* res);
-int thrd_detach(thrd_t thr);
-thrd_t thrd_current(void);
-int thrd_equal(thrd_t a, thrd_t b);
-int thrd_sleep(const struct timespec* ts_in, struct timespec* rem_out);
-void thrd_yield(void);
+DMINT C11THREADS_MSVC_NORETURN void thrd_exit(int res) C11THREADS_GNUC_NORETURN;
+DMINT int thrd_join(thrd_t thr, int* res);
+DMINT int thrd_detach(thrd_t thr);
+DMINT thrd_t thrd_current(void);
+DMINT int thrd_equal(thrd_t a, thrd_t b);
+DMINT int thrd_sleep(const struct timespec* ts_in, struct timespec* rem_out);
+DMINT void thrd_yield(void);
 
 /* Mutex functions. */
 
-int mtx_init(mtx_t* mtx, int type);
-void mtx_destroy(mtx_t* mtx);
-int mtx_lock(mtx_t* mtx);
-int mtx_trylock(mtx_t* mtx);
-int mtx_timedlock(mtx_t* mtx, const struct timespec* ts);
-int mtx_unlock(mtx_t* mtx);
+DMINT int mtx_init(mtx_t* mtx, int type);
+DMINT void mtx_destroy(mtx_t* mtx);
+DMINT int mtx_lock(mtx_t* mtx);
+DMINT int mtx_trylock(mtx_t* mtx);
+DMINT int mtx_timedlock(mtx_t* mtx, const struct timespec* ts);
+DMINT int mtx_unlock(mtx_t* mtx);
 
 /* Condition variable functions. */
 
-int cnd_init(cnd_t* cond);
-void cnd_destroy(cnd_t* cond);
-int cnd_signal(cnd_t* cond);
-int cnd_broadcast(cnd_t* cond);
-int cnd_wait(cnd_t* cond, mtx_t* mtx);
-int cnd_timedwait(cnd_t* cond, mtx_t* mtx, const struct timespec* ts);
+DMINT int cnd_init(cnd_t* cond);
+DMINT void cnd_destroy(cnd_t* cond);
+DMINT int cnd_signal(cnd_t* cond);
+DMINT int cnd_broadcast(cnd_t* cond);
+DMINT int cnd_wait(cnd_t* cond, mtx_t* mtx);
+DMINT int cnd_timedwait(cnd_t* cond, mtx_t* mtx, const struct timespec* ts);
 
 /* Thread-specific storage functions. */
 
-int tss_create(tss_t* key, tss_dtor_t dtor);
-void tss_delete(tss_t key);
-int tss_set(tss_t key, void* val);
-void* tss_get(tss_t key);
+DMINT int tss_create(tss_t* key, tss_dtor_t dtor);
+DMINT void tss_delete(tss_t key);
+DMINT int tss_set(tss_t key, void* val);
+DMINT void* tss_get(tss_t key);
 
 /* One-time callable function. */
 
-void call_once(once_flag* flag, void (*func)(void));
+DMINT void call_once(once_flag* flag, void (*func)(void));
 
 /* Special Win32 functions. */
 /* Win32: Free resources associated with this library. */
-void c11threads_win32_destroy(void);
+DMINT void c11threads_win32_destroy(void);
 /* Win32: Register current Win32 thread in c11threads to allow for proper thrd_join(). */
-int c11threads_win32_thrd_self_register(void);
+DMINT int c11threads_win32_thrd_self_register(void);
 /* Win32: Register Win32 thread by ID in c11threads to allow for proper thrd_join(). */
-int c11threads_win32_thrd_register(unsigned long win32_thread_id);
+DMINT int c11threads_win32_thrd_register(unsigned long win32_thread_id);
 
 	#ifdef _MSC_VER
 		#pragma warning(push)
@@ -242,20 +242,20 @@ int c11threads_win32_thrd_register(unsigned long win32_thread_id);
 
 /* ---- thread management ---- */
 
-int _c11threads_win32_thrd_sleep32(const struct _c11threads_win32_timespec32_t* ts_in,
+DMINT int _c11threads_win32_thrd_sleep32(const struct _c11threads_win32_timespec32_t* ts_in,
                                    struct _c11threads_win32_timespec32_t* rem_out);
-int _c11threads_win32_thrd_sleep64(const struct _c11threads_win32_timespec64_t* ts_in,
+DMINT int _c11threads_win32_thrd_sleep64(const struct _c11threads_win32_timespec64_t* ts_in,
                                    struct _c11threads_win32_timespec64_t* rem_out);
 
 /* ---- mutexes ---- */
 
-int _c11threads_win32_mtx_timedlock32(mtx_t* mtx, const struct _c11threads_win32_timespec32_t* ts);
-int _c11threads_win32_mtx_timedlock64(mtx_t* mtx, const struct _c11threads_win32_timespec64_t* ts);
+DMINT int _c11threads_win32_mtx_timedlock32(mtx_t* mtx, const struct _c11threads_win32_timespec32_t* ts);
+DMINT int _c11threads_win32_mtx_timedlock64(mtx_t* mtx, const struct _c11threads_win32_timespec64_t* ts);
 
 /* ---- condition variables ---- */
 
-int _c11threads_win32_cnd_timedwait32(cnd_t* cond, mtx_t* mtx, const struct _c11threads_win32_timespec32_t* ts);
-int _c11threads_win32_cnd_timedwait64(cnd_t* cond, mtx_t* mtx, const struct _c11threads_win32_timespec64_t* ts);
+DMINT int _c11threads_win32_cnd_timedwait32(cnd_t* cond, mtx_t* mtx, const struct _c11threads_win32_timespec32_t* ts);
+DMINT int _c11threads_win32_cnd_timedwait64(cnd_t* cond, mtx_t* mtx, const struct _c11threads_win32_timespec64_t* ts);
 
 /* ---- misc ---- */
 #endif
