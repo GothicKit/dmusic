@@ -734,7 +734,7 @@ static void DmPerformance_handleSegmentMessage(DmPerformance* slf, DmMessage_Seg
 		DmMessage m;
 		m.type = DmMessage_SEGMENT;
 		m.time = 0;
-		m.segment.segment = sgt;
+		m.segment.segment = DmSegment_retain(sgt);
 		m.segment.loop = msg->loop + 1;
 
 		DmMessageQueue_add(&slf->control_queue, &m, slf->time + slf->segment->length, DmQueueConflict_KEEP);
