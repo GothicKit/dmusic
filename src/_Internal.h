@@ -62,7 +62,7 @@ DmArray_DEFINE(DmStyleCache, struct DmStyle*);
 
 struct DmLoader {
 	_Atomic size_t reference_count;
-	mtx_t cache_lock;
+	mtx_t lock;
 
 	bool autodownload;
 	DmResolverList resolvers;
@@ -536,7 +536,7 @@ typedef struct DmMessageQueue {
 
 struct DmPerformance {
 	_Atomic size_t reference_count;
-	mtx_t mod_lock;
+	mtx_t lock;
 
 	DmMessageQueue control_queue;
 	DmMessageQueue music_queue;

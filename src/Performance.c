@@ -30,21 +30,21 @@ DmResult DmPerformance_create(DmPerformance** slf, uint32_t rate) {
 
 	DmSynth_init(&new->synth, new->sample_rate);
 
-	if (mtx_init(&new->mod_lock, mtx_plain) != thrd_success) {
+	if (mtx_init(&new->lock, mtx_plain) != thrd_success) {
 		Dm_free(new);
 		return DmResult_MUTEX_ERROR;
 	}
 
 	DmResult rv = DmMessageQueue_init(&new->control_queue);
 	if (rv != DmResult_SUCCESS) {
-		mtx_destroy(&new->mod_lock);
+		mtx_destroy(&new->lock);
 		Dm_free(new);
 		return rv;
 	}
 
 	rv = DmMessageQueue_init(&new->music_queue);
 	if (rv != DmResult_SUCCESS) {
-		mtx_destroy(&new->mod_lock);
+		mtx_destroy(&new->lock);
 		DmMessageQueue_free(&new->control_queue);
 		Dm_free(new);
 		return rv;
@@ -72,7 +72,7 @@ void DmPerformance_release(DmPerformance* slf) {
 		return;
 	}
 
-	mtx_destroy(&slf->mod_lock);
+	mtx_destroy(&slf->lock);
 	DmMessageQueue_free(&slf->control_queue);
 	DmMessageQueue_free(&slf->music_queue);
 	DmSegment_release(slf->segment);
@@ -127,13 +127,13 @@ DmResult DmPerformance_playSegment(DmPerformance* slf, DmSegment* sgt, DmTiming 
 	msg.segment.segment = DmSegment_retain(sgt);
 	msg.segment.loop = 0;
 
-	if (mtx_lock(&slf->mod_lock) != thrd_success) {
+	if (mtx_lock(&slf->lock) != thrd_success) {
 		return DmResult_MUTEX_ERROR;
 	}
 
 	DmMessageQueue_add(&slf->control_queue, &msg, offset, DmQueueConflict_REPLACE);
 
-	(void) mtx_unlock(&slf->mod_lock);
+	(void) mtx_unlock(&slf->lock);
 	return DmResult_SUCCESS;
 }
 
@@ -864,18 +864,18 @@ DmResult DmPerformance_renderPcm(DmPerformance* slf, void* buf, size_t len, DmRe
 	DmMessage msg_ctrl;
 	DmMessage msg_midi;
 
+	if (mtx_lock(&slf->lock) != thrd_success) {
+		return DmResult_MUTEX_ERROR;
+	}
+
 	size_t sample = 0;
 	while (sample < len) {
-		if (mtx_lock(&slf->mod_lock) != thrd_success) {
-			return DmResult_MUTEX_ERROR;
-		}
 
 		bool ok_ctrl = DmMessageQueue_get(&slf->control_queue, &msg_ctrl);
 		bool ok_midi = DmMessageQueue_get(&slf->music_queue, &msg_midi);
 
 		if (!ok_ctrl && !ok_midi) {
 			// No more messages to process.
-			(void) mtx_unlock(&slf->mod_lock);
 			break;
 		}
 
@@ -884,11 +884,6 @@ DmResult DmPerformance_renderPcm(DmPerformance* slf, void* buf, size_t len, DmRe
 			// earlier while preferring control messages
 			ok_ctrl = msg_ctrl.time <= msg_midi.time;
 			ok_midi = msg_midi.time < msg_ctrl.time;
-		}
-
-		if (ok_midi) {
-			// We only need to lock the internal mutex if the message we've got is a control message.
-			(void) mtx_unlock(&slf->mod_lock);
 		}
 
 		DmMessage msg;
@@ -901,10 +896,6 @@ DmResult DmPerformance_renderPcm(DmPerformance* slf, void* buf, size_t len, DmRe
 		if (offset_samples > len - sample) {
 			// The next message does not fall into this render call (i.e. it happens after the number of
 			// samples left to process)
-
-			if (ok_ctrl) {
-				(void) mtx_unlock(&slf->mod_lock);
-			}
 			break;
 		}
 
@@ -932,7 +923,6 @@ DmResult DmPerformance_renderPcm(DmPerformance* slf, void* buf, size_t len, DmRe
 		// Handle the next message
 		if (ok_ctrl) {
 			DmMessageQueue_pop(&slf->control_queue);
-			(void) mtx_unlock(&slf->mod_lock);
 		} else {
 			DmMessageQueue_pop(&slf->music_queue);
 		}
@@ -940,6 +930,8 @@ DmResult DmPerformance_renderPcm(DmPerformance* slf, void* buf, size_t len, DmRe
 		DmPerformance_handleMessage(slf, &msg);
 		DmMessage_free(&msg);
 	}
+
+	(void) mtx_unlock(&slf->lock);
 
 	// Render the remaining samples
 	uint32_t remaining_samples = (uint32_t) (len - sample);
