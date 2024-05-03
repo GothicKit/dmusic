@@ -746,9 +746,9 @@ static void DmPerformance_handleMessage(DmPerformance* slf, DmMessage* msg) {
 	case DmMessage_SEGMENT:
 		if (msg->segment.segment) {
 			Dm_report(DmLogLevel_TRACE,
-					  "DmPerformance(Message): time=%d type=segment-change name=\"%s\"",
-					  slf->time,
-					  msg->segment.segment->info.unam);
+			          "DmPerformance(Message): time=%d type=segment-change name=\"%s\"",
+			          slf->time,
+			          msg->segment.segment->info.unam);
 		}
 
 		DmPerformance_handleSegmentMessage(slf, &msg->segment);

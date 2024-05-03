@@ -141,7 +141,8 @@ static size_t DmSynth_insertGeneratorArticulators(struct tsf_hydra_igen* gens, D
 	return count;
 }
 
-static DmResult Dm_createHydraSamplesForDls(DmDls* dls, float** pcm, int32_t* pcm_len, struct tsf_hydra_shdr** cfg, int32_t* cfg_len) {
+static DmResult
+Dm_createHydraSamplesForDls(DmDls* dls, float** pcm, int32_t* pcm_len, struct tsf_hydra_shdr** cfg, int32_t* cfg_len) {
 	// 1. Count the number of PCM samples actually required after decoding.
 	size_t sample_count = 0;
 	for (uint32_t i = 0; i < dls->wave_table_size; ++i) {

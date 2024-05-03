@@ -244,9 +244,9 @@ DMINT int c11threads_win32_thrd_register(unsigned long win32_thread_id);
 /* ---- thread management ---- */
 
 DMINT int _c11threads_win32_thrd_sleep32(const struct _c11threads_win32_timespec32_t* ts_in,
-                                   struct _c11threads_win32_timespec32_t* rem_out);
+                                         struct _c11threads_win32_timespec32_t* rem_out);
 DMINT int _c11threads_win32_thrd_sleep64(const struct _c11threads_win32_timespec64_t* ts_in,
-                                   struct _c11threads_win32_timespec64_t* rem_out);
+                                         struct _c11threads_win32_timespec64_t* rem_out);
 
 /* ---- mutexes ---- */
 

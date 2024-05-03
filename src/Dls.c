@@ -189,7 +189,7 @@ static uint8_t const* DmDls_decodeAdpcmBlock(uint8_t const* adpcm, float* pcm, u
 		int predictor = (coeff_1 * sample_a + coeff_2 * sample_b) / 256;
 		predictor += nibble * delta;
 		predictor = clamp_16bit(predictor);
-		*pcm++ = (float) predictor / (float)INT16_MAX;
+		*pcm++ = (float) predictor / (float) INT16_MAX;
 		sample_b = sample_a;
 		sample_a = (int16_t) (predictor);
 		delta = max_s32((ADPCM_ADAPT_TABLE[(b & 0xF0) >> 4] * delta) / 256, 16);
@@ -199,7 +199,7 @@ static uint8_t const* DmDls_decodeAdpcmBlock(uint8_t const* adpcm, float* pcm, u
 		predictor = (coeff_1 * sample_a + coeff_2 * sample_b) / 256;
 		predictor += nibble * delta;
 		predictor = clamp_16bit(predictor);
-		*pcm++ = (float) predictor / (float)INT16_MAX;
+		*pcm++ = (float) predictor / (float) INT16_MAX;
 		sample_b = sample_a;
 		sample_a = (int16_t) (predictor);
 		delta = max_s32((ADPCM_ADAPT_TABLE[b & 0x0F] * delta) / 256, 16);
@@ -217,7 +217,8 @@ static size_t DmDls_decodeAdpcm(DmDlsWave const* slf, float* out, size_t len) {
 	}
 
 	uint32_t block_count = slf->pcm_size / slf->block_align;
-	uint32_t frames_per_block = (uint32_t) (slf->block_align - 6 * slf->channels) * 2 /* two frames per channel from the header */;
+	uint32_t frames_per_block =
+	    (uint32_t) (slf->block_align - 6 * slf->channels) * 2 /* two frames per channel from the header */;
 	uint32_t size = frames_per_block * block_count;
 
 	if (out == NULL || len == 0) {

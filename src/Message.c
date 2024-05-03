@@ -131,7 +131,7 @@ static void DmMessageQueue_heapRemove(DmMessageQueue* slf) {
 			sort_2 = DmMessage_sort(&slf->queue[slf_i]->data, &slf->queue[child_2]->data);
 		}
 
-		if ((sort_1 == -2 && sort_2 == -2) || (sort_1 <= 0 && sort_2 <= 0))  {
+		if ((sort_1 == -2 && sort_2 == -2) || (sort_1 <= 0 && sort_2 <= 0)) {
 			break;
 		}
 
@@ -194,7 +194,7 @@ void DmMessageQueue_free(DmMessageQueue* slf) {
 
 static DmMessageQueueItem* DmMessageQueue_getAt(DmMessageQueue* slf, size_t time, DmMessageType type) {
 	for (size_t i = 0; i < slf->queue_length; ++i) {
-		int64_t delta = (int64_t) slf->queue[i]->data.time - (int64_t)time;
+		int64_t delta = (int64_t) slf->queue[i]->data.time - (int64_t) time;
 		int64_t d = delta < 0 ? (delta * -1) : delta;
 		if (d < 10 && slf->queue[i]->data.type == type) {
 			return slf->queue[i];
@@ -286,4 +286,3 @@ void DmMessageQueue_clear(DmMessageQueue* slf) {
 
 	slf->queue_length = 0;
 }
-

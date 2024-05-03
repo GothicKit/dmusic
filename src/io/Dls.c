@@ -116,7 +116,7 @@ static DmResult DmDls_parseRegion(DmDlsRegion* slf, DmRiff* rif) {
 
 			// If we're overriding lart, we need to free all the exising articulators
 			if (slf->articulators != NULL) {
-				for (size_t i = 0; i < slf->articulator_count; ++i)  {
+				for (size_t i = 0; i < slf->articulator_count; ++i) {
 					DmDlsArticulator_free(&slf->articulators[i]);
 				}
 
@@ -193,7 +193,7 @@ static DmResult DmDls_parseInstrument(DmDlsInstrument* slf, DmRiff* rif) {
 
 			// If we're overriding lart, we need to free all the exising articulators
 			if (slf->articulators != NULL) {
-				for (size_t i = 0; i < slf->articulator_count; ++i)  {
+				for (size_t i = 0; i < slf->articulator_count; ++i) {
 					DmDlsArticulator_free(&slf->articulators[i]);
 				}
 
