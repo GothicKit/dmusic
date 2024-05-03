@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: MIT-Modern-Variant
 #pragma once
 #include <stdbool.h>
-#include <uchar.h>
 
 #define DM_FOURCC(a, b, c, d) (((d) << 24U) | ((c) << 16U) | ((b) << 8U) | (a))
 #define DM_FOURCC_RIFF DM_FOURCC('R', 'I', 'F', 'F')
@@ -118,7 +117,7 @@ DMINT void DmInfo_parse(DmInfo* slf, DmRiff* rif);
 DMINT void DmVersion_parse(DmVersion* slf, DmRiff* rif);
 DMINT void DmReference_parse(DmReference* slf, DmRiff* rif);
 
-DMINT char* Dm_utf16ToUtf8Inline(char* out, char16_t const* u16);
+DMINT char* Dm_utf16ToUtf8Inline(char* out, uint16_t const* u16);
 
 DMINT bool DmRiff_init(DmRiff* slf, void const* buf, size_t len);
 DMINT bool DmRiff_is(DmRiff const* slf, uint32_t id, uint32_t typ);
@@ -132,5 +131,5 @@ DMINT void DmRiff_readInt(DmRiff* slf, int32_t* buf);
 DMINT void DmRiff_readDword(DmRiff* slf, uint32_t* buf);
 DMINT void DmRiff_readDouble(DmRiff* slf, double* buf);
 DMINT char const* DmRiff_readString(DmRiff* slf);
-DMINT char16_t* DmRiff_readStringUtf(DmRiff* slf);
+DMINT uint16_t* DmRiff_readStringUtf(DmRiff* slf);
 DMINT void DmRiff_reportDone(DmRiff* slf);

@@ -12,7 +12,6 @@
 
 #include <stdatomic.h>
 #include <stdbool.h>
-#include <uchar.h>
 
 typedef enum DmResolveFlags {
 	DmResolve_AFTER_PREPARE_TIME = 1 << 10,

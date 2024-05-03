@@ -2,14 +2,13 @@
 // SPDX-License-Identifier: MIT-Modern-Variant
 #include "_Internal.h"
 
-#include <uchar.h>
 #include <wchar.h>
 
 void DmGuid_parse(DmGuid* slf, DmRiff* rif) {
 	DmRiff_read(rif, slf->data, sizeof slf->data);
 }
 
-char* Dm_utf16ToUtf8Inline(char* out, char16_t const* u16) {
+char* Dm_utf16ToUtf8Inline(char* out, uint16_t const* u16) {
 	size_t len = 0;
 	while (u16[len] != 0) {
 		len += 1;
@@ -21,13 +20,7 @@ char* Dm_utf16ToUtf8Inline(char* out, char16_t const* u16) {
 	size_t i = 0;
 	size_t j = 0;
 	for (; i < len; ++i) {
-#ifndef _WIN32
-		j += c16rtomb(out + j, u16[i], &state);
-#else
-		// NOTE: MinGW on Windows does not correctly implement `c16romb`, thus we just use `wcrtomb`.
-		// According to MinGW, `char16_t` should be equivalent to `wchar_t` on Windows.
-		j += wcrtomb(out + j, (wchar_t) u16[i], &state);
-#endif
+		j += wcrtomb(out + j, u16[i], &state);
 	}
 
 	out[j] = '\0';
@@ -38,7 +31,7 @@ void DmUnfo_parse(DmUnfo* slf, DmRiff* rif) {
 	DmRiff cnk;
 	while (DmRiff_readChunk(rif, &cnk)) {
 		if (DmRiff_is(&cnk, DM_FOURCC_UNAM, 0)) {
-			char16_t* raw = DmRiff_readStringUtf(&cnk);
+			uint16_t* raw = DmRiff_readStringUtf(&cnk);
 			slf->unam = Dm_utf16ToUtf8Inline((char*) raw, raw);
 		} else {
 			DmRiff_reportDone(&cnk);
@@ -83,11 +76,11 @@ void DmReference_parse(DmReference* slf, DmRiff* rif) {
 		} else if (DmRiff_is(&cnk, DM_FOURCC_GUID, 0)) {
 			DmGuid_parse(&slf->guid, &cnk);
 		} else if (DmRiff_is(&cnk, DM_FOURCC_NAME, 0)) {
-			char16_t* raw = DmRiff_readStringUtf(&cnk);
+			uint16_t* raw = DmRiff_readStringUtf(&cnk);
 			slf->name = Dm_utf16ToUtf8Inline((char*) raw, raw);
 			continue; // Ignore following bytes
 		} else if (DmRiff_is(&cnk, DM_FOURCC_FILE, 0)) {
-			char16_t* raw = DmRiff_readStringUtf(&cnk);
+			uint16_t* raw = DmRiff_readStringUtf(&cnk);
 			slf->file = Dm_utf16ToUtf8Inline((char*) raw, raw);
 			continue; // Ignore following bytes
 		} else if (DmRiff_is(&cnk, DM_FOURCC_VERS, 0)) {
