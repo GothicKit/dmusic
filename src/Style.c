@@ -111,6 +111,7 @@ DmPattern* DmStyle_getRandomPattern(DmStyle* slf, uint32_t groove, DmCommandType
 	//                   but I couldn't find it.
 
 	int64_t index = Dm_rand() % (uint32_t) slf->patterns.length;
+	bool found_one = false;
 	do {
 		for (size_t i = 0; i < slf->patterns.length; ++i) {
 			DmPattern* pttn = &slf->patterns.data[i];
@@ -136,8 +137,9 @@ DmPattern* DmStyle_getRandomPattern(DmStyle* slf, uint32_t groove, DmCommandType
 			}
 
 			index -= 1;
+			found_one = true;
 		}
-	} while (index >= 0);
+	} while (found_one);
 
 	return NULL;
 }
