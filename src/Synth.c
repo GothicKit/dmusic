@@ -64,7 +64,6 @@ static DmSynthFont* DmSynth_getFont(DmSynth* slf, DmInstrument* ins) {
 }
 
 static DmResult DmSynth_updateFonts(DmSynth* slf, DmBand* band) {
-	DmResult rv = DmResult_SUCCESS;
 	for (size_t i = 0; i < band->instruments_len; ++i) {
 		DmInstrument* ins = &band->instruments[i];
 		if (ins->dls == NULL) {
@@ -78,12 +77,13 @@ static DmResult DmSynth_updateFonts(DmSynth* slf, DmBand* band) {
 			DmSynthFont new_fnt;
 			new_fnt.dls = ins->dls;
 
+			DmResult rv = DmResult_SUCCESS;
 			rv = DmSynth_createTsfForDls(ins->dls, &new_fnt.syn);
 			if (rv != DmResult_SUCCESS) {
 				continue;
 			}
 
-			tsf_set_output(new_fnt.syn, TSF_STEREO_INTERLEAVED, slf->rate, 0);
+			tsf_set_output(new_fnt.syn, TSF_STEREO_INTERLEAVED, (int) slf->rate, 0);
 			tsf_set_volume(new_fnt.syn, slf->volume);
 
 			rv = DmSynthFontArray_add(&slf->fonts, new_fnt);
@@ -145,7 +145,7 @@ static DmResult DmSynth_assignInstrumentChannels(DmSynth* slf, DmBand* band) {
 
 		DmSynthFont* fnt = DmSynth_getFont(slf, ins);
 		chan->font = fnt;
-		chan->channel = ins->channel;
+		chan->channel = (int) ins->channel;
 
 		if (fnt == NULL) {
 			continue;
@@ -155,18 +155,18 @@ static DmResult DmSynth_assignInstrumentChannels(DmSynth* slf, DmBand* band) {
 		uint32_t patch = ins->patch & 0xFFU;
 
 		tsf_set_volume(fnt->syn, slf->volume);
-		tsf_channel_set_bank_preset(fnt->syn, ins->channel, bank, patch);
+		tsf_channel_set_bank_preset(fnt->syn, (int) ins->channel, (int) bank, (int) patch);
 
 		// Update the instrument's properties
 		if (ins->options & DmInstrument_VALID_PAN) {
 			float pan = (float) ins->pan / (float) DmInt_MIDI_MAX;
-			tsf_channel_set_pan(fnt->syn, ins->channel, pan);
+			tsf_channel_set_pan(fnt->syn, (int) ins->channel, pan);
 			chan->reset_pan = pan;
 		}
 
 		if (ins->options & DmInstrument_VALID_VOLUME) {
 			float vol = (float) ins->volume / DmInt_MIDI_MAX;
-			tsf_channel_set_volume(fnt->syn, ins->channel, vol);
+			tsf_channel_set_volume(fnt->syn, (int) ins->channel, vol);
 			chan->reset_volume = vol;
 		}
 
@@ -178,10 +178,7 @@ static DmResult DmSynth_assignInstrumentChannels(DmSynth* slf, DmBand* band) {
 	return DmResult_SUCCESS;
 }
 
-// TODO(lmichaelis): Technically, we should change as little as possible to accommodate the new band.
-//                   For example: if only the pan of an instrument changes, we should also only update that
-//                   instead of reloading the entire instrument list and re-creating all TSFs.
-// See also: https://documentation.help/DirectMusic/usingbands.htm
+// See https://documentation.help/DirectMusic/usingbands.htm
 void DmSynth_sendBandUpdate(DmSynth* slf, DmBand* band) {
 	if (slf == NULL || band == NULL) {
 		return;

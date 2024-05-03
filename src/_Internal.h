@@ -566,7 +566,6 @@ DMINT int32_t max_s32(int32_t a, int32_t b);
 DMINT uint8_t min_u8(uint8_t a, uint8_t b);
 DMINT float lerp(float x, float start, float end);
 DMINT int32_t clamp_s32(int32_t val, int32_t min, int32_t max);
-DMINT float clamp_f32(float val, float min, float max);
 DMINT int32_t Dm_randRange(int32_t range);
 DMINT DmCommandType Dm_embellishmentToCommand(DmEmbellishmentType embellishment);
 DMINT bool DmGuid_equals(DmGuid const* a, DmGuid const* b);

@@ -57,7 +57,7 @@ DmResult Dm_composeTransition(DmStyle* sty,
 		}
 
 		if (embellishment == DmEmbellishment_END_AND_INTRO) {
-			// Complex "extro" plus "intro" transitoon
+			// Complex "extro" plus "intro" transition
 			msg.type = DmMessage_COMMAND;
 			msg.command.command = DmCommand_END;
 			msg.command.groove_level = 1;

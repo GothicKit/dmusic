@@ -189,7 +189,7 @@ static DmResult Dm_createHydraSamplesForDls(DmDls* dls, float** pcm, int32_t* pc
 	return DmResult_SUCCESS;
 }
 
-static DmResult Dm_createHydra(DmDls* dls, struct tsf_hydra* res) {
+static DmResult Dm_createHydraSkeleton(DmDls* dls, struct tsf_hydra* res) {
 	// 1. Count the number of presets required and allocate them
 	// -> We need one for each instrument
 	res->phdrNum = dls->instrument_count + 1; // One for the sentinel
@@ -262,25 +262,17 @@ static DmResult Dm_createHydra(DmDls* dls, struct tsf_hydra* res) {
 	return ok ? DmResult_SUCCESS : DmResult_MEMORY_EXHAUSTED;
 }
 
-DmResult DmSynth_createTsfForDls(DmDls* dls, tsf** out) {
-	if (dls == NULL) {
-		return DmResult_INVALID_ARGUMENT;
-	}
-
-	// Initialize the hydra by allocation all required memory
-	struct tsf_hydra hydra;
-
-	DmResult rv = Dm_createHydra(dls, &hydra);
+// We export this function for the tools.
+static DmResult Dm_createHydra(DmDls* dls, struct tsf_hydra* hydra, float** pcm, int32_t* pcm_len) {
+	DmResult rv = Dm_createHydraSkeleton(dls, hydra);
 	if (rv != DmResult_SUCCESS) {
 		return rv;
 	}
 
 	// Decode all PCM and create the sample headers.
-	float* pcm = NULL;
-	int32_t pcm_len = 0;
 	struct tsf_hydra_shdr* default_shdrs = NULL;
 	int32_t default_shdrs_len = 0;
-	rv = Dm_createHydraSamplesForDls(dls, &pcm, &pcm_len, &default_shdrs, &default_shdrs_len);
+	rv = Dm_createHydraSamplesForDls(dls, pcm, pcm_len, &default_shdrs, &default_shdrs_len);
 	if (rv != DmResult_SUCCESS) {
 		return rv;
 	}
@@ -301,37 +293,37 @@ DmResult DmSynth_createTsfForDls(DmDls* dls, tsf** out) {
 			bank = 999;
 		}
 
-		strncpy(hydra.phdrs[i].presetName, ins->info.inam, 19);
-		hydra.phdrs[i].bank = bank;
-		hydra.phdrs[i].preset = ins->patch;
-		hydra.phdrs[i].genre = 0;
-		hydra.phdrs[i].morphology = 0;
-		hydra.phdrs[i].library = 0;
-		hydra.phdrs[i].presetBagNdx = i;
+		strncpy(hydra->phdrs[i].presetName, ins->info.inam, 19);
+		hydra->phdrs[i].bank = bank;
+		hydra->phdrs[i].preset = ins->patch;
+		hydra->phdrs[i].genre = 0;
+		hydra->phdrs[i].morphology = 0;
+		hydra->phdrs[i].library = 0;
+		hydra->phdrs[i].presetBagNdx = i;
 
-		hydra.pbags[i].genNdx = pgen_ndx;
-		hydra.pbags[i].modNdx = pmod_ndx;
+		hydra->pbags[i].genNdx = pgen_ndx;
+		hydra->pbags[i].modNdx = pmod_ndx;
 
-		hydra.pgens[pgen_ndx].genOper = kInstrument;
-		hydra.pgens[pgen_ndx].genAmount.wordAmount = i;
+		hydra->pgens[pgen_ndx].genOper = kInstrument;
+		hydra->pgens[pgen_ndx].genAmount.wordAmount = i;
 		pgen_ndx++;
 
-		strncpy(hydra.insts[i].instName, ins->info.inam, 19);
-		hydra.insts[i].instBagNdx = ibag_ndx;
+		strncpy(hydra->insts[i].instName, ins->info.inam, 19);
+		hydra->insts[i].instBagNdx = ibag_ndx;
 
 		for (size_t r = 0; r < ins->region_count; ++r) {
 			DmDlsRegion* reg = &ins->regions[r];
 
-			hydra.ibags[ibag_ndx].instGenNdx = igen_ndx;
-			hydra.ibags[ibag_ndx].instModNdx = imod_ndx;
+			hydra->ibags[ibag_ndx].instGenNdx = igen_ndx;
+			hydra->ibags[ibag_ndx].instModNdx = imod_ndx;
 			ibag_ndx++;
 
-			hydra.igens[igen_ndx].genOper = kKeyRange;
-			hydra.igens[igen_ndx].genAmount.range.hi = (tsf_u8) reg->range_high;
-			hydra.igens[igen_ndx].genAmount.range.lo = (tsf_u8) reg->range_low;
+			hydra->igens[igen_ndx].genOper = kKeyRange;
+			hydra->igens[igen_ndx].genAmount.range.hi = (tsf_u8) reg->range_high;
+			hydra->igens[igen_ndx].genAmount.range.lo = (tsf_u8) reg->range_low;
 			igen_ndx++;
 
-			hydra.igens[igen_ndx].genOper = kVelRange;
+			hydra->igens[igen_ndx].genOper = kVelRange;
 			uint8_t vel_hi = reg->velocity_high;
 			uint8_t vel_lo = reg->velocity_low;
 
@@ -340,37 +332,37 @@ DmResult DmSynth_createTsfForDls(DmDls* dls, tsf** out) {
 				vel_lo = 0;
 			}
 
-			hydra.igens[igen_ndx].genAmount.range.hi = vel_hi;
-			hydra.igens[igen_ndx].genAmount.range.lo = vel_lo;
+			hydra->igens[igen_ndx].genAmount.range.hi = vel_hi;
+			hydra->igens[igen_ndx].genAmount.range.lo = vel_lo;
 			igen_ndx++;
 
-			hydra.igens[igen_ndx].genOper = kAttackVolEnv;
-			hydra.igens[igen_ndx].genAmount.shortAmount = sf2SecondsToTimeCents(0.1);
+			hydra->igens[igen_ndx].genOper = kAttackVolEnv;
+			hydra->igens[igen_ndx].genAmount.shortAmount = sf2SecondsToTimeCents(0.1);
 			igen_ndx++;
 
-			hydra.igens[igen_ndx].genOper = kInitialAttenuation;
-			hydra.igens[igen_ndx].genAmount.shortAmount = (tsf_s16) reg->sample.attenuation;
+			hydra->igens[igen_ndx].genOper = kInitialAttenuation;
+			hydra->igens[igen_ndx].genAmount.shortAmount = (tsf_s16) reg->sample.attenuation;
 			igen_ndx++;
 
 			// Articulators
 			for (size_t a = 0; a < ins->articulator_count; ++a) {
-				igen_ndx += DmSynth_insertGeneratorArticulators(hydra.igens + igen_ndx, &ins->articulators[a]);
+				igen_ndx += DmSynth_insertGeneratorArticulators(hydra->igens + igen_ndx, &ins->articulators[a]);
 			}
 
 			for (size_t a = 0; a < reg->articulator_count; ++a) {
-				igen_ndx += DmSynth_insertGeneratorArticulators(hydra.igens + igen_ndx, &reg->articulators[a]);
+				igen_ndx += DmSynth_insertGeneratorArticulators(hydra->igens + igen_ndx, &reg->articulators[a]);
 			}
 
-			hydra.igens[igen_ndx].genOper = kSampleModes;
-			hydra.igens[igen_ndx].genAmount.wordAmount = reg->sample.looping == true ? 1 : 0;
+			hydra->igens[igen_ndx].genOper = kSampleModes;
+			hydra->igens[igen_ndx].genAmount.wordAmount = reg->sample.looping == true ? 1 : 0;
 			igen_ndx++;
 
-			hydra.igens[igen_ndx].genOper = kSampleID;
-			hydra.igens[igen_ndx].genAmount.wordAmount = shdr_ndx;
+			hydra->igens[igen_ndx].genOper = kSampleID;
+			hydra->igens[igen_ndx].genAmount.wordAmount = shdr_ndx;
 			igen_ndx++;
 
 			// Additional sample configuration.
-			struct tsf_hydra_shdr* hdr = &hydra.shdrs[shdr_ndx];
+			struct tsf_hydra_shdr* hdr = &hydra->shdrs[shdr_ndx];
 			*hdr = default_shdrs[reg->link_table_index];
 			shdr_ndx++;
 
@@ -394,40 +386,72 @@ DmResult DmSynth_createTsfForDls(DmDls* dls, tsf** out) {
 	}
 
 	// Populate the sentinel values of the hydra
-	strncpy(hydra.phdrs[hydra.phdrNum - 1].presetName, "EOP", 19);
-	hydra.phdrs[hydra.phdrNum - 1].bank = 0;
-	hydra.phdrs[hydra.phdrNum - 1].preset = 0;
-	hydra.phdrs[hydra.phdrNum - 1].genre = 0;
-	hydra.phdrs[hydra.phdrNum - 1].morphology = 0;
-	hydra.phdrs[hydra.phdrNum - 1].library = 0;
-	hydra.phdrs[hydra.phdrNum - 1].presetBagNdx = hydra.pbagNum - 1;
+	strncpy(hydra->phdrs[hydra->phdrNum - 1].presetName, "EOP", 19);
+	hydra->phdrs[hydra->phdrNum - 1].bank = 0;
+	hydra->phdrs[hydra->phdrNum - 1].preset = 0;
+	hydra->phdrs[hydra->phdrNum - 1].genre = 0;
+	hydra->phdrs[hydra->phdrNum - 1].morphology = 0;
+	hydra->phdrs[hydra->phdrNum - 1].library = 0;
+	hydra->phdrs[hydra->phdrNum - 1].presetBagNdx = hydra->pbagNum - 1;
 
-	hydra.pbags[hydra.pbagNum - 1].genNdx = hydra.pgenNum - 1;
-	hydra.pbags[hydra.pbagNum - 1].modNdx = hydra.pmodNum - 1;
+	hydra->pbags[hydra->pbagNum - 1].genNdx = hydra->pgenNum - 1;
+	hydra->pbags[hydra->pbagNum - 1].modNdx = hydra->pmodNum - 1;
 
-	hydra.pgens[hydra.pgenNum - 1].genOper = 0;
-	hydra.pgens[hydra.pgenNum - 1].genAmount.shortAmount = 0;
+	hydra->pgens[hydra->pgenNum - 1].genOper = 0;
+	hydra->pgens[hydra->pgenNum - 1].genAmount.shortAmount = 0;
 
-	hydra.pmods[hydra.pmodNum - 1].modSrcOper = 0;
-	hydra.pmods[hydra.pmodNum - 1].modDestOper = 0;
-	hydra.pmods[hydra.pmodNum - 1].modTransOper = 0;
-	hydra.pmods[hydra.pmodNum - 1].modAmount = 0;
-	hydra.pmods[hydra.pmodNum - 1].modAmtSrcOper = 0;
+	hydra->pmods[hydra->pmodNum - 1].modSrcOper = 0;
+	hydra->pmods[hydra->pmodNum - 1].modDestOper = 0;
+	hydra->pmods[hydra->pmodNum - 1].modTransOper = 0;
+	hydra->pmods[hydra->pmodNum - 1].modAmount = 0;
+	hydra->pmods[hydra->pmodNum - 1].modAmtSrcOper = 0;
 
-	strncpy(hydra.insts[hydra.instNum - 1].instName, "EOI", 19);
-	hydra.insts[hydra.instNum - 1].instBagNdx = hydra.ibagNum - 1;
+	strncpy(hydra->insts[hydra->instNum - 1].instName, "EOI", 19);
+	hydra->insts[hydra->instNum - 1].instBagNdx = hydra->ibagNum - 1;
 
-	hydra.ibags[hydra.ibagNum - 1].instGenNdx = hydra.igenNum - 1;
-	hydra.ibags[hydra.ibagNum - 1].instModNdx = hydra.imodNum - 1;
+	hydra->ibags[hydra->ibagNum - 1].instGenNdx = hydra->igenNum - 1;
+	hydra->ibags[hydra->ibagNum - 1].instModNdx = hydra->imodNum - 1;
 
-	hydra.igens[hydra.igenNum - 1].genOper = 0;
-	hydra.igens[hydra.igenNum - 1].genAmount.shortAmount = 0;
+	hydra->igens[hydra->igenNum - 1].genOper = 0;
+	hydra->igens[hydra->igenNum - 1].genAmount.shortAmount = 0;
 
-	hydra.imods[hydra.imodNum - 1].modSrcOper = 0;
-	hydra.imods[hydra.imodNum - 1].modDestOper = 0;
-	hydra.imods[hydra.imodNum - 1].modTransOper = 0;
-	hydra.imods[hydra.imodNum - 1].modAmount = 0;
-	hydra.imods[hydra.imodNum - 1].modAmtSrcOper = 0;
+	hydra->imods[hydra->imodNum - 1].modSrcOper = 0;
+	hydra->imods[hydra->imodNum - 1].modDestOper = 0;
+	hydra->imods[hydra->imodNum - 1].modTransOper = 0;
+	hydra->imods[hydra->imodNum - 1].modAmount = 0;
+	hydra->imods[hydra->imodNum - 1].modAmtSrcOper = 0;
+
+	Dm_free(default_shdrs);
+	return DmResult_SUCCESS;
+}
+
+// We export this function for the tools.
+static void Dm_freeHydra(struct tsf_hydra* hydra) {
+	Dm_free(hydra->phdrs);
+	Dm_free(hydra->pbags);
+	Dm_free(hydra->pgens);
+	Dm_free(hydra->pmods);
+	Dm_free(hydra->insts);
+	Dm_free(hydra->ibags);
+	Dm_free(hydra->igens);
+	Dm_free(hydra->imods);
+	Dm_free(hydra->shdrs);
+}
+
+DmResult DmSynth_createTsfForDls(DmDls* dls, tsf** out) {
+	if (dls == NULL) {
+		return DmResult_INVALID_ARGUMENT;
+	}
+
+	// Initialize the hydra by allocation all required memory
+	struct tsf_hydra hydra;
+	float* pcm = NULL;
+	int32_t pcm_len = 0;
+
+	DmResult rv = Dm_createHydra(dls, &hydra, &pcm, &pcm_len);
+	if (rv != DmResult_SUCCESS) {
+		return rv;
+	}
 
 	// Finally, create the tsf
 	tsf* res = *out = Dm_alloc(sizeof(tsf));
@@ -443,16 +467,7 @@ DmResult DmSynth_createTsfForDls(DmDls* dls, tsf** out) {
 	res->fontSamples = pcm;
 
 	// Lastly, free up all the hydra stuff
-	Dm_free(default_shdrs);
-	Dm_free(hydra.phdrs);
-	Dm_free(hydra.pbags);
-	Dm_free(hydra.pgens);
-	Dm_free(hydra.pmods);
-	Dm_free(hydra.insts);
-	Dm_free(hydra.ibags);
-	Dm_free(hydra.igens);
-	Dm_free(hydra.imods);
-	Dm_free(hydra.shdrs);
+	Dm_freeHydra(&hydra);
 
 	return DmResult_SUCCESS;
 }

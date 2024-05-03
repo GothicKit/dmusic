@@ -7,6 +7,7 @@
 
 enum {
 	DmInt_TICKS_PER_QUARTER_NOTE = 768,
+	DmInt_SECONDS_PER_MINUTE = 60,
 };
 
 size_t max_usize(size_t a, size_t b) {
@@ -26,18 +27,6 @@ float lerp(float x, float start, float end) {
 }
 
 int32_t clamp_s32(int32_t val, int32_t min, int32_t max) {
-	if (val < min) {
-		return min;
-	}
-
-	if (val > max) {
-		return max;
-	}
-
-	return val;
-}
-
-float clamp_f32(float val, float min, float max) {
 	if (val < min) {
 		return min;
 	}
@@ -97,10 +86,10 @@ uint32_t Dm_getMeasureLength(DmTimeSignature sig) {
 }
 
 double Dm_getTicksPerSample(DmTimeSignature time_signature, double beats_per_minute, uint32_t sample_rate) {
-	uint32_t pulses_per_beat = Dm_getBeatLength(time_signature);   // unit: music-time per beat
-	double beats_per_second = beats_per_minute / 60;               // unit: 1 per second
-	double pulses_per_second = pulses_per_beat * beats_per_second; // unit: music-time per second
-	double pulses_per_sample = pulses_per_second / sample_rate;    // unit: music-time per sample
+	uint32_t pulses_per_beat = Dm_getBeatLength(time_signature);           // unit: music-time per beat
+	double beats_per_second = beats_per_minute / DmInt_SECONDS_PER_MINUTE; // unit: 1 per second
+	double pulses_per_second = pulses_per_beat * beats_per_second;         // unit: music-time per second
+	double pulses_per_sample = pulses_per_second / sample_rate;            // unit: music-time per sample
 	return pulses_per_sample;
 }
 
