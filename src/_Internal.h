@@ -555,9 +555,6 @@ struct DmPerformance {
 	double tempo;
 	DmMessage_Chord chord;
 	DmTimeSignature time_signature;
-
-	int pitch_bend_reset;
-	float volume_reset;
 };
 
 DMINT void* Dm_alloc(size_t len);
