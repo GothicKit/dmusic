@@ -8,6 +8,7 @@
 //
 // https://github.com/jtsiomb/c11threads
 #pragma once
+#include "dmusic.h"
 
 /* If you wish to use this with pthread-win32 (i.e. use the POSIX threads wrapper
  * instead of the native win32 API implementation of C11 threads), then just

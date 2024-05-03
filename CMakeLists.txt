@@ -52,7 +52,7 @@ target_include_directories(dmusic PRIVATE src)
 target_compile_definitions(dmusic PRIVATE DM_BUILD=1)
 target_compile_options(dmusic PRIVATE ${_DM_COMPILE_FLAGS})
 target_link_options(dmusic PRIVATE ${_DM_LINK_FLAGS})
-target_link_libraries(dmusic PRIVATE tsf)
+target_link_libraries(dmusic PRIVATE dmusic-tsf)
 
 if (MINGW)
     target_compile_definitions(dmusic PRIVATE _POSIX_C_SOURCE=1)
