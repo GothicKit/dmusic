@@ -218,6 +218,18 @@ DMAPI void DmSegment_release(DmSegment* slf);
 /// \retval #DmResult_MEMORY_EXHAUSTED A dynamic memory allocation failed.
 DMAPI DmResult DmSegment_download(DmSegment* slf, DmLoader* loader);
 
+/// \brief Get the GUID of the given segment.
+/// \note The returned pointer is only valid for as long as a strong reference to the segment is held.
+/// \param slf[in] The segment to get the GUID of.
+/// \return A read-only pointer to the segment's GUID.
+DMAPI DmGuid const* DmSegment_getGuid(DmSegment const* slf);
+
+/// \brief Get the name of the given segment.
+/// \note The returned pointer is only valid for as long as a strong reference to the segment is held.
+/// \param slf[in] The segment to get the name of.
+/// \return A read-only pointer to the segment's name in UTF-8.
+DMAPI char const* DmSegment_getName(DmSegment const* slf);
+
 /// \}
 
 /// \defgroup DmLoaderGroup Loader

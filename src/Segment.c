@@ -72,3 +72,19 @@ DmResult DmSegment_download(DmSegment* slf, DmLoader* loader) {
 	slf->downloaded = true;
 	return rv;
 }
+
+DmGuid const* DmSegment_getGuid(DmSegment const* slf) {
+	if (slf == NULL) {
+		return NULL;
+	}
+
+	return &slf->guid;
+}
+
+char const* DmSegment_getName(DmSegment const* slf) {
+	if (slf == NULL) {
+		return NULL;
+	}
+
+	return slf->info.unam;
+}
