@@ -64,7 +64,11 @@ static void DmInt_defaultLogger(void* ctx, DmLogLevel lvl, char const* msg) {
 
 	struct tm now;
 	time_t now_t = time(NULL);
+#ifndef _MSC_VER
 	(void) gmtime_r(&now_t, &now);
+#else
+	now = *gmtime(&now_t);
+#endif
 
 	char const* format = PREFIX " (     ) › %s: %s\n";
 	switch (lvl) {
