@@ -29,6 +29,7 @@ function(bs_select_cflags SANITIZERS COMPILE LINK)
 endfunction()
 
 ## Compute the compile and link play_mode_flags for MSVC
+## See: https://devblogs.microsoft.com/cppblog/c11-atomics-in-visual-studio-2022-version-17-5-preview-2/
 ##
 ## Args:
 ##   SANITIZERS(bool): Whether to enable sanitizers or not.
@@ -37,7 +38,7 @@ endfunction()
 ##   COMPILE(list): A list containing the compiler play_mode_flags
 ##   LINK(list): A list containing the linker play_mode_flags
 function(bs_internal_select_cflags_msvc SANITIZERS COMPILE LINK)
-    list(APPEND _INTERNAL_COMPILE_FLAGS "/Wall")
+    list(APPEND _INTERNAL_COMPILE_FLAGS "/Wall" "/experimental:c11atomics")
 
     if (CMAKE_BUILD_TYPE MATCHES "^Debug" AND ${SANITIZERS})
         list(APPEND _INTERNAL_COMPILE_FLAGS "/fsanitize=address")
