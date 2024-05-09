@@ -196,7 +196,67 @@ DMAPI void Dm_setLoggerLevel(DmLogLevel lvl);
 /// \}
 
 /// \defgroup DmSegmentGroup Segment
-/// \brief TODO
+/// \brief Structures and functions related to DirectMusic Segments.
+///
+/// ## Overview
+///
+/// Segments are the heart of all DirectMusic scores. They contain information about how to arrange the musical piece
+/// including, among other things, the tempo, which bands to use and how to integrate with the style. Exported segments
+/// usually have the file extension `.sgt` while [DirectMusic Producer][dm-producer] uses `.sgp` instead.
+///
+/// This library only supports what is known as [Style-based Segments][style-based-segments] at the moment. This means,
+/// that only _style_, _chord_, _command_, _band_ and _tempo_ tracks are supported. All other tracks are ignored.
+///
+/// ### What exactly is a track?
+///
+/// DirectMusic is a dynamic system which selects and plays back music in real time. To do this, the composer specifies
+/// at least one set of distinct musical patterns known as a [Style][dm-style] and at least one set of instruments
+/// called a [Band][dm-band] as well as a set of tempos, commands and chords to be played back in real time. These
+/// components are all separated into so-called [Tracks][dm-track] in which they are saved by timestamp. During
+/// playback, DirectMusic will process each track whenever its timestamp is reached and perform the action associated
+/// with it.
+///
+/// For example, a composer could create a segment which contains a tempo track with one entry per measure (the musical
+/// unit). During playback, the playback engine will then change the tempo at each measure to the value set by the
+/// composer. This applies to all five supported tracks, so a composer could, for example, also include band changes
+/// mid-playback.
+///
+/// ### Bands and band tracks
+///
+/// DirectMusic Bands are collections of instruments each assigned to a [Performance Channel][dm-performance-channel].
+/// Instruments are backed by [Downloadable Sound][dls] (_"DLS"_) files which contain wave-tables for one or more
+/// instruments, very similar to [SoundFont][sf2] files. At runtime, bands are loaded an unloaded according to the
+/// band track. It specifies which band should be active which timestamps.
+///
+/// ### Styles and style tracks
+///
+/// DirectMusic Styles contain the actual notes to be played by the instruments specified in the band. Each instrument
+/// is assigned one or more _parts_ each containing one set of notes and possibly random variations. Parts are then
+/// combined into _patterns_, which contain multiple parts to be played at the same time. At runtime, the playback
+/// engine will select a pattern according to the command track of the segment which it will then start playing. To do
+/// this, the playback engine takes the notes of each _part_ referenced by the _pattern_ and assigns the notes to be
+/// played to each referenced instrument while taking into account the currently playing chord selected by the chord
+/// track and choosing a variation either, randomly, sequentially or otherwise as specified by the composer.
+///
+/// ### Why do I need to download a segment?
+///
+/// Styles the Downloadable Sounds referenced by the segment are stored in separate files. For the playback engine to
+/// have access to the data contained within, it needs to open and load the contents of these files. To avoid doing
+/// this during playback, since opening and loading files can take a few milliseconds (enough to notice playback
+/// stuttering), these files must be loaded before submitting the segment for playback. This should be done in a
+/// separate thread than the actual music rendering (see #DmPerformance_renderPcm).
+///
+/// ### I've loaded a segment, how do I play the damn thing?
+///
+/// Playback is done using a #DmPerformance object. See the documentation for \ref DmPerformanceGroup and
+/// #DmPerformance_renderPcm for more details.
+///
+/// [dm-producer]: https://www.vgmpf.com/Wiki/index.php?title=DirectMusic_Producer
+/// [dm-style]: https://documentation.help/DirectMusic/styles.htm
+/// [dm-band]: https://documentation.help/DirectMusic/usingbands.htm
+/// [dm-track]: https://documentation.help/DirectMusic/directmusictracks.htm
+/// [dm-performance-channel]: https://documentation.help/DirectMusic/performancechannels.htm
+/// [style-based-segments]: https://documentation.help/DirectMusic/stylebasedsegments.htm
 
 /// \ingroup DmSegmentGroup
 /// \brief Represents a DirectMusic Segment.
