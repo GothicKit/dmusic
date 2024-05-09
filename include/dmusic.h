@@ -36,13 +36,27 @@
 /// \addtogroup DmCommonGroup
 /// \{
 
+/// \brief Possible operation result values.
 typedef enum DmResult {
+	/// \brief The operation completed successfully.
 	DmResult_SUCCESS = 0,
+
+	/// \brief An invalid argument was provided.
 	DmResult_INVALID_ARGUMENT,
+
+	/// \brief The operation could not be completed because the system is in an invalid state.
 	DmResult_INVALID_STATE,
+
+	/// \brief A memory allocation failed.
 	DmResult_MEMORY_EXHAUSTED,
+
+	/// \brief A resource was not found.
 	DmResult_NOT_FOUND,
+
+	/// \brief A resource file could not be parsed.
 	DmResult_FILE_CORRUPT,
+
+	/// \brief A mutex could not be locked.
 	DmResult_MUTEX_ERROR,
 } DmResult;
 
@@ -181,11 +195,27 @@ DMAPI void Dm_setLoggerLevel(DmLogLevel lvl);
 
 /// \}
 
+/// \defgroup DmSegmentGroup Segment
+/// \brief TODO
+
+/// \ingroup DmSegmentGroup
+/// \brief Represents a DirectMusic Segment.
 typedef struct DmSegment DmSegment;
+
+/// \defgroup DmLoaderGroup Loader
+/// \brief TODO
+
+/// \ingroup DmLoaderGroup
+/// \brief Represents a DirectMusic Loader.
 typedef struct DmLoader DmLoader;
+
+/// \defgroup DmPerformanceGroup Performance
+/// \brief TODO
+
+/// \ingroup DmPerformanceGroup
+/// \brief Represents a DirectMusic Performance.
 typedef struct DmPerformance DmPerformance;
 
-/// \defgroup DmSegmentGroup Segment
 /// \addtogroup DmSegmentGroup
 /// \{
 
@@ -243,7 +273,6 @@ DMAPI double DmSegment_getLength(DmSegment const* slf);
 
 /// \}
 
-/// \defgroup DmLoaderGroup Loader
 /// \addtogroup DmLoaderGroup
 /// \{
 
@@ -339,7 +368,6 @@ DMAPI DmResult DmLoader_getSegment(DmLoader* slf, char const* name, DmSegment** 
 
 /// \}
 
-/// \defgroup DmPerformanceGroup Performance
 /// \addtogroup DmPerformanceGroup
 /// \{
 
@@ -368,13 +396,29 @@ typedef enum DmTiming {
 	DmTiming_MEASURE = 4,
 } DmTiming;
 
+/// \brief Embellishment types for choosing transition patterns.
 typedef enum DmEmbellishmentType {
+	/// \brief Don't choose a pattern.
 	DmEmbellishment_NONE = 0,
+
+	/// \brief Only choose patterns with the default 'groove' embellishment.
 	DmEmbellishment_GROOVE = 1,
+
+	/// \brief Only choose patterns with the 'fill' embellishment.
 	DmEmbellishment_FILL = 2,
+
+	/// \brief Only choose patterns with the 'intro' embellishment.
 	DmEmbellishment_INTRO = 3,
+
+	/// \brief Only choose patterns with the 'break' embellishment.
 	DmEmbellishment_BREAK = 4,
+
+	/// \brief Only choose patterns with the 'end' embellishment.
 	DmEmbellishment_END = 5,
+
+	/// \brief Choose two patterns, one with the 'end' embellishment from the playing segment and one with
+	///        the 'intro' embellishment from the new segment and play them back-to-back.
+	/// \todo This is not yet implemented.
 	DmEmbellishment_END_AND_INTRO = 6,
 } DmEmbellishmentType;
 
