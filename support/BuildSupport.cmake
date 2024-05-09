@@ -60,7 +60,7 @@ endfunction()
 ##   LINK(list): A list containing the linker play_mode_flags
 function(bs_internal_select_cflags_gcc SANITIZERS COMPILE LINK)
     # "Who cares about ISO C anyway?"
-    list(APPEND _INTERNAL_FLAGS "-Wall" "-Wextra" "-Werror" "-Wshadow" "-fPIC" "-flto" "-Wno-cast-function-type")
+    list(APPEND _INTERNAL_FLAGS "-Wall" "-Wextra" "-Werror" "-Wshadow" "-fPIC" "-Wno-cast-function-type")
 
     if (CMAKE_BUILD_TYPE MATCHES "^Debug" AND ${SANITIZERS} AND NOT WIN32)
         list(APPEND _INTERNAL_FLAGS "-fsanitize=address" "-fsanitize=undefined" "-fsanitize=leak")
