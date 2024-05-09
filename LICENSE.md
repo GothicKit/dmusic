@@ -1,3 +1,4 @@
+# The MIT License (Modern Variant)
 Copyright © 2024. GothicKit Contributors
 
 Permission is hereby granted, without written agreement and without
