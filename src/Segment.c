@@ -88,3 +88,33 @@ char const* DmSegment_getName(DmSegment const* slf) {
 
 	return slf->info.unam;
 }
+
+double DmSegment_getLength(DmSegment const* slf) {
+	if (slf == NULL) {
+		return 0;
+	}
+
+	// NOTE: This assumes that the tempo messages are ordered from earliest to latest
+	DmTimeSignature signature = {4, 4, 4};
+	uint32_t offset = 0;
+	double tempo = 100.;
+	double duration = 0;
+
+	for (unsigned i = 0; i < slf->messages.length; ++i) {
+		DmMessage* msg = &slf->messages.data[i];
+		if (msg->type != DmMessage_TEMPO) {
+			continue;
+		}
+
+		uint32_t ticks = msg->time - offset;
+		tempo = msg->tempo.tempo;
+
+		duration += ticks / Dm_getTicksPerSecond(signature, tempo);
+		offset = msg->time;
+	}
+
+	uint32_t ticks = slf->length - offset;
+	duration += ticks / Dm_getTicksPerSecond(signature, tempo);
+
+	return duration;
+}

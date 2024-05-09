@@ -573,6 +573,7 @@ DMINT void DmTimeSignature_parse(DmTimeSignature* slf, DmRiff* rif);
 
 DMINT uint32_t Dm_getBeatLength(DmTimeSignature sig);
 DMINT uint32_t Dm_getMeasureLength(DmTimeSignature sig);
+DMINT double Dm_getTicksPerSecond(DmTimeSignature time_signature, double beats_per_minute);
 DMINT double Dm_getTicksPerSample(DmTimeSignature time_signature, double beats_per_minute, uint32_t sample_rate);
 DMINT uint32_t Dm_getTimeOffset(uint32_t grid_start, int32_t time_offset, DmTimeSignature sig);
 DMINT uint32_t Dm_getSampleCountForDuration(uint32_t duration,

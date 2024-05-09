@@ -230,6 +230,17 @@ DMAPI DmGuid const* DmSegment_getGuid(DmSegment const* slf);
 /// \return A read-only pointer to the segment's name in UTF-8.
 DMAPI char const* DmSegment_getName(DmSegment const* slf);
 
+/// \brief Get the length of the given segment in seconds.
+///
+/// The number of PCM samples required to render `n` seconds of the segment can be calculated like this:
+///     \f$x_{samples} = n \cdot x_{rate} \cdot n_{channels}\f$
+/// where \f$x_{rate}\f$ is the sample rate to use (usually 44100 Hz) and \f$n_{channels}\f$ is the number
+/// of PCM output channels (1 for mono and 2 for stereo PCM).
+///
+/// \param slf[in] The segment to get the length of
+/// \return The number of seconds one repeat of the segment takes.
+DMAPI double DmSegment_getLength(DmSegment const* slf);
+
 /// \}
 
 /// \defgroup DmLoaderGroup Loader

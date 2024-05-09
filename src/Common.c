@@ -85,11 +85,16 @@ uint32_t Dm_getMeasureLength(DmTimeSignature sig) {
 	return v;
 }
 
-double Dm_getTicksPerSample(DmTimeSignature time_signature, double beats_per_minute, uint32_t sample_rate) {
+double Dm_getTicksPerSecond(DmTimeSignature time_signature, double beats_per_minute) {
 	uint32_t pulses_per_beat = Dm_getBeatLength(time_signature);           // unit: music-time per beat
 	double beats_per_second = beats_per_minute / DmInt_SECONDS_PER_MINUTE; // unit: 1 per second
 	double pulses_per_second = pulses_per_beat * beats_per_second;         // unit: music-time per second
-	double pulses_per_sample = pulses_per_second / sample_rate;            // unit: music-time per sample
+	return pulses_per_second;
+}
+
+double Dm_getTicksPerSample(DmTimeSignature time_signature, double beats_per_minute, uint32_t sample_rate) {
+	double pulses_per_second = Dm_getTicksPerSecond(time_signature, beats_per_minute); // unit: music-time per second
+	double pulses_per_sample = pulses_per_second / sample_rate;                        // unit: music-time per sample
 	return pulses_per_sample;
 }
 
