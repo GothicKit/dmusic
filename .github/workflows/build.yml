@@ -1,5 +1,12 @@
 name: 'Build'
-on: 'push'
+on:
+  push:
+    paths:
+      - include/*.h
+      - src/**
+      - vendor/**
+      - support/*.cmake
+      - CMakeLists.txt
 jobs:
   linux:
     name: "Linux"
