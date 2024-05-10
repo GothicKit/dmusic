@@ -60,7 +60,19 @@ typedef enum DmResult {
 	DmResult_MUTEX_ERROR,
 } DmResult;
 
+/// \brief Contains a 128-bit *GUID* (aka *UUID*) value.
+///
+/// GUIDs are used in *DirectMusic Segments*, *Styles*, *Bands* and *Downloadable Sound* files as a way to uniquely
+/// identify distinct objects. For some of these objects, these GUIDs are exposed by their APIs. Many of these GUIDs
+/// could be manually set by the composer although generally, they are generated randomly by *DirectMusic Producer*
+/// upon object creation.
+///
+/// \attention Do not alter GUIDs retrieved using the library APIs directly. Doing this can lead to cache misses which
+///            result in the underlying file being re-loaded the next time the object is used, causing higher memory
+///            usage and a spike in processing times. It can also result in broken playback (e.g. missing instruments).
+/// \see https://en.wikipedia.org/wiki/Universally_unique_identifier for more in-depth information about GUIDs.
 typedef struct DmGuid {
+	/// \brief The bytes representing the GUID's value.
 	uint8_t data[16];
 } DmGuid;
 
