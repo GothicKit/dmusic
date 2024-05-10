@@ -90,7 +90,7 @@ DMAPI size_t DmGuid_toString(DmGuid const* slf, char* out, size_t len);
 /// \brief A `malloc`-like memory allocation function.
 ///
 /// Allocates \p len bytes of contiguous memory and returns a pointer to the first byte allocated. May return NULL
-/// if memory allocation fails for any reason. In this case, function which rely on allocation will failed with
+/// if memory allocation fails for any reason. In this case, function which relies on the allocation will fail with
 /// #DmResult_MEMORY_EXHAUSTED to indicate memory allocation failure.
 ///
 /// \warning Functions implementing this interface are required to be thread-safe.

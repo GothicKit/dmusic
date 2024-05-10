@@ -17,7 +17,7 @@ Here's how you play back a segment. This example works on POSIX only since it us
 On Windows, you simply need to replace dm_resolve_file with a Windows-compatible implementation.
 
 ```c
- #include <dmusic.h>
+#include <dmusic.h>
 
 #include <stddef.h>
 #include <stdio.h>
