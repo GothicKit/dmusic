@@ -64,6 +64,17 @@ typedef struct DmGuid {
 	uint8_t data[16];
 } DmGuid;
 
+/// \brief Convert the given GUID to a string.
+///
+/// The output string is generated in 8-4-4-4-12 format and thus needs 36 chars (excl. nul-terminator) to be fully
+/// converted. The number of chars actually converted can be obtained from the return value.
+///
+/// \param slf[in] The GUID to convert to a string.
+/// \param out[out] The output buffer to write the chars to.
+/// \param len The maximum number of bytes available in the \p out buffer.
+/// \return The number of chars actually written to the \p out buffer.
+DMAPI size_t DmGuid_toString(DmGuid const* slf, char* out, size_t len);
+
 /// \brief A `malloc`-like memory allocation function.
 ///
 /// Allocates \p len bytes of contiguous memory and returns a pointer to the first byte allocated. May return NULL

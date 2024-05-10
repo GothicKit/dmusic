@@ -3,6 +3,7 @@
 #include "_Internal.h"
 
 #include <math.h>
+#include <stdio.h>
 #include <stdlib.h>
 
 enum {
@@ -64,6 +65,32 @@ DmCommandType Dm_embellishmentToCommand(DmEmbellishmentType embellishment) {
 
 bool DmGuid_equals(DmGuid const* a, DmGuid const* b) {
 	return memcmp(a->data, b->data, sizeof a->data) == 0;
+}
+
+size_t DmGuid_toString(DmGuid const* slf, char* out, size_t len) {
+	if (slf == NULL) {
+		return 0;
+	}
+
+	return snprintf(out,
+	                len,
+	                "%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-%02x%02x%02x%02x%02x%02x",
+	                slf->data[0x0],
+	                slf->data[0x1],
+	                slf->data[0x2],
+	                slf->data[0x3],
+	                slf->data[0x4],
+	                slf->data[0x5],
+	                slf->data[0x6],
+	                slf->data[0x7],
+	                slf->data[0x8],
+	                slf->data[0x9],
+	                slf->data[0xA],
+	                slf->data[0xB],
+	                slf->data[0xC],
+	                slf->data[0xD],
+	                slf->data[0xE],
+	                slf->data[0xF]);
 }
 
 uint32_t Dm_getBeatLength(DmTimeSignature sig) {
