@@ -113,7 +113,7 @@ typedef void* DmMemoryAlloc(void* ctx, size_t len);
 /// \warning Functions implementing this interface are required to be thread-safe.
 ///
 /// \param ctx[in] An arbitrary pointer provided when calling #Dm_setHeapAllocator.
-/// \param ptr[in] A pointer to free, previously returned by the corresponding #DmMemoryAlloc function or NULL.
+/// \param ptr[in] A pointer to free, previously returned by the corresponding #DmMemoryAlloc function or `NULL`.
 ///
 /// \see Dm_setHeapAllocator Set the memory allocator for the library.
 typedef void DmMemoryFree(void* ctx, void* ptr);
@@ -142,7 +142,7 @@ DMAPI DmResult Dm_setHeapAllocator(DmMemoryAlloc* alloc, DmMemoryFree* free, voi
 ///
 /// Generates a random number between 0 and UINT32_MAX. Functions implementing this interface must be
 /// thread-safe. The function is not required to produce different numbers upon invocation and it does
-/// not need to be cryptographically safe. Calling a function implementing this interface should be
+/// not need to be cryptographically secure. Calling a function implementing this interface should be
 /// inexpensive.
 ///
 /// \param ctx[in] An arbitrary pointer provided when calling #Dm_setRandomNumberGenerator.
@@ -304,7 +304,7 @@ typedef struct DmPerformance DmPerformance;
 
 /// \brief Add one to the reference count of a segment.
 /// \param slf[in] The segment to retain.
-/// \return The same segment as was given in \p slf or `NULL` if \p slf was `NULL`.
+/// \return The same segment as was given in \p slf or `NULL` if \p slf is `NULL`.
 DMAPI DmSegment* DmSegment_retain(DmSegment* slf);
 
 /// \brief Subtract one from the reference count of a segment.
@@ -332,25 +332,25 @@ DMAPI void DmSegment_release(DmSegment* slf);
 DMAPI DmResult DmSegment_download(DmSegment* slf, DmLoader* loader);
 
 /// \brief Get the GUID of the given segment.
-/// \note The returned pointer is only valid for as long as a strong reference to the segment is held.
+/// \warning The returned pointer is only valid for as long as a strong reference to the segment is held.
 /// \param slf[in] The segment to get the GUID of.
-/// \return A read-only pointer to the segment's GUID.
+/// \return A read-only pointer to the segment's GUID or `NULL` if \p slf is `NULL`.
 DMAPI DmGuid const* DmSegment_getGuid(DmSegment const* slf);
 
 /// \brief Get the name of the given segment.
 /// \note The returned pointer is only valid for as long as a strong reference to the segment is held.
 /// \param slf[in] The segment to get the name of.
-/// \return A read-only pointer to the segment's name in UTF-8.
+/// \return A read-only pointer to the segment's name in UTF-8 or `NULL` if \p slf is `NULL`.
 DMAPI char const* DmSegment_getName(DmSegment const* slf);
 
 /// \brief Get the length of the given segment in seconds.
 ///
 /// The number of PCM samples required to render `n` seconds of the segment can be calculated like this:
-///     \f$x_{samples} = n \cdot x_{rate} \cdot n_{channels}\f$
+///     \f$n_{samples} = n \cdot x_{rate} \cdot n_{channels}\f$
 /// where \f$x_{rate}\f$ is the sample rate to use (usually 44100 Hz) and \f$n_{channels}\f$ is the number
 /// of PCM output channels (1 for mono and 2 for stereo PCM).
 ///
-/// \param slf[in] The segment to get the length of
+/// \param slf[in] The segment to get the length of.
 /// \return The number of seconds one repeat of the segment takes.
 DMAPI double DmSegment_getLength(DmSegment const* slf);
 

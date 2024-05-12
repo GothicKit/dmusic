@@ -106,6 +106,9 @@ typedef enum DmInstrumentFlags {
 
 	/// \brief The instrument is from any of the predefined collections
 	DmInstrument_PREDEFINED_COLLECTION = DmInstrument_GENERAL_MIDI | DmInstrument_ROLAND_GS | DmInstrument_YAMAHA_XG,
+
+	/// \brief The General MIDI collection should be loaded in software
+	///        even if the hardware supports it natively.
 	DmInstrument_USE_DEFAULT_GM_SET = (1 << 12),
 } DmInstrumentOptions;
 
@@ -556,9 +559,40 @@ struct DmPerformance {
 	DmTimeSignature time_signature;
 };
 
+/// \brief Allocate \p len bytes on the heap.
+///
+/// If set, this function will automatically choose a user-provided allocator over a the default one.
+///
+/// \note This function is thread-safe.
+/// \param len The number of bytes to allocate.
+/// \return A pointer to the first allocated byte or `NULL` if allocation failed.
+/// \see Dm_free
+/// \see Dm_setHeapAllocator
 DMINT void* Dm_alloc(size_t len);
+
+/// \brief Free a heap-allocated pointer previously allocated by #Dm_alloc
+///
+/// If set, this function will automatically choose a user-provided allocator over a the default one.
+///
+/// \note This function is thread-safe.
+/// \param ptr A pointer to the memory to de-allocate or `NULL`.
+/// \see Dm_alloc
+/// \see Dm_setHeapAllocator
 DMINT void Dm_free(void* ptr);
+
+/// \brief Generate a log message at the given level.
+/// \invariant \p fmt may not be `NULL`.
+/// \param lvl The level of the log message to generate.
+/// \param fmt The log message as a `printf`-style format string.
+/// \param ... The values for the format string.
+/// \see Dm_setLogger
+/// \see Dm_setLoggerDefault
+/// \see Dm_setLoggerLevel
 DMINT void Dm_report(DmLogLevel lvl, char const* fmt, ...);
+
+/// \brief Generate a random number in the range 0 to UINT32_MAX.
+/// \return A random number.
+/// \see Dm_setRandomNumberGenerator
 DMINT uint32_t Dm_rand(void);
 
 DMINT size_t max_usize(size_t a, size_t b);
