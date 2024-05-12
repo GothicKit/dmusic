@@ -710,7 +710,7 @@ static void DmPerformance_handleSegmentMessage(DmPerformance* slf, DmMessage_Seg
 	// NOTE: If we have a different `play_start` or `loop_start`, we need to discard messages
 	//       before it and make sure to re-align them at time 0.
 	uint32_t start = msg->loop != 0 ? sgt->loop_start : sgt->play_start;
-	uint32_t end = msg->loop != 0 ? sgt->loop_end : sgt->length;
+	uint32_t end = (msg->loop != 0 && sgt->loop_end != 0) ? sgt->loop_end : sgt->length;
 
 	for (size_t i = 0; i < sgt->messages.length; ++i) {
 		DmMessage* m = &sgt->messages.data[i];
