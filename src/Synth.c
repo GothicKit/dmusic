@@ -289,7 +289,7 @@ void DmSynth_sendNoteOff(DmSynth* slf, uint32_t channel, uint8_t note) {
 		return;
 	}
 
-	tsf_channel_note_off(chan->font->syn, chan->channel, note);
+	tsf_channel_note_off(chan->font->syn, chan->channel, note + chan->transpose);
 }
 
 void DmSynth_sendNoteOffAll(DmSynth* slf, uint32_t channel) {
