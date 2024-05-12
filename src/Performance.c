@@ -726,6 +726,14 @@ static void DmPerformance_handleSegmentMessage(DmPerformance* slf, DmMessage_Seg
 		DmMessageQueue_add(&slf->control_queue, m, mt, DmQueueConflict_REPLACE);
 	}
 
+	// If we don't yet have a command, add it!
+	DmMessage cmd;
+	cmd.type = DmMessage_COMMAND;
+	cmd.time = 0;
+	cmd.command.command = DmCommand_GROOVE;
+	cmd.command.groove_level = 1;
+	DmMessageQueue_add(&slf->control_queue, &cmd, 0, DmQueueConflict_KEEP);
+
 	slf->segment = DmSegment_retain(sgt);
 	slf->segment_start = slf->time;
 
