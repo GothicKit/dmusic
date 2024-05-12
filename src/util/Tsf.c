@@ -30,6 +30,7 @@ enum {
 	kInitialAttenuation = 48,
 	kSampleID = 53,
 	kSampleModes = 54,
+	kExclusiveClass = 57,
 
 	kSamplePadding = 46,
 };
@@ -230,9 +231,9 @@ static DmResult Dm_createHydraSkeleton(DmDls* dls, struct tsf_hydra* res) {
 		// -> We need one sample for each instrument region
 		res->shdrNum += ins->region_count;
 
-		// -> We need 6 generators for the implicit 'kKeyRange', 'kVelRange', 'kAttackVolEnv',
-		//   'kInitialAttenuation', 'kSampleModes' and 'kSampleID' for each zone
-		res->igenNum += ins->region_count * 6;
+		// -> We need 7 generators for the implicit 'kKeyRange', 'kVelRange', 'kAttackVolEnv',
+		//   'kInitialAttenuation', 'kSampleModes', 'kSampleID', 'kExclusiveClass' for each zone
+		res->igenNum += ins->region_count * 7;
 
 		// -> We need one generator for each instrument-level articulator connection
 		for (size_t a = 0; a < ins->articulator_count; ++a) {
@@ -360,6 +361,10 @@ static DmResult Dm_createHydra(DmDls* dls, struct tsf_hydra* hydra, float** pcm,
 
 			hydra->igens[igen_ndx].genOper = kSampleID;
 			hydra->igens[igen_ndx].genAmount.wordAmount = shdr_ndx;
+			igen_ndx++;
+
+			hydra->igens[igen_ndx].genOper = kExclusiveClass;
+			hydra->igens[igen_ndx].genAmount.wordAmount = reg->key_group;
 			igen_ndx++;
 
 			// Additional sample configuration.

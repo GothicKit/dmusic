@@ -723,7 +723,11 @@ static void DmPerformance_handleSegmentMessage(DmPerformance* slf, DmMessage_Seg
 		// The message starts at the indicated message's time but aligned at zero based on the start offset.
 		uint32_t mt = slf->time + m->time - start;
 
-		DmMessageQueue_add(&slf->control_queue, m, mt, DmQueueConflict_REPLACE);
+		if (m->type != DmMessage_NOTE) {
+			DmMessageQueue_add(&slf->control_queue, m, mt, DmQueueConflict_REPLACE);
+		} else {
+			DmMessageQueue_add(&slf->control_queue, m, mt, DmQueueConflict_APPEND);
+		}
 	}
 
 	// If we don't yet have a command, add it!
