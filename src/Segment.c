@@ -128,3 +128,12 @@ double DmSegment_getLength(DmSegment const* slf) {
 
 	return duration;
 }
+
+uint32_t DmSegment_getRepeats(DmSegment const* slf) {
+	if (slf == NULL) {
+		Dm_report(DmLogLevel_ERROR, "DmSegment: NULL passed to `DmSegment_getRepeats`");
+		return 0;
+	}
+
+	return slf->repeats;
+}

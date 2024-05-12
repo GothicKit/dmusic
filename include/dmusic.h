@@ -354,6 +354,11 @@ DMAPI char const* DmSegment_getName(DmSegment const* slf);
 /// \return The number of seconds one repeat of the segment takes.
 DMAPI double DmSegment_getLength(DmSegment const* slf);
 
+/// \brief Get the number of times the segment repeats.
+/// \param slf[in] The segment to get the number of repeats of.
+/// \return The number of times the segment repeats or `0` if \p slf is `NULL`.
+DMAPI uint32_t DmSegment_getRepeats(DmSegment const* slf);
+
 /// \}
 
 /// \addtogroup DmLoaderGroup
