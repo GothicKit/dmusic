@@ -21,6 +21,7 @@ DmResult DmSegment_create(DmSegment** slf) {
 
 DmSegment* DmSegment_retain(DmSegment* slf) {
 	if (slf == NULL) {
+		Dm_report(DmLogLevel_ERROR, "DmSegment: NULL passed to `DmSegment_release`");
 		return NULL;
 	}
 
@@ -30,6 +31,7 @@ DmSegment* DmSegment_retain(DmSegment* slf) {
 
 void DmSegment_release(DmSegment* slf) {
 	if (slf == NULL) {
+		Dm_report(DmLogLevel_WARN, "DmSegment: NULL passed to `DmSegment_release`");
 		return;
 	}
 
@@ -46,6 +48,11 @@ void DmSegment_release(DmSegment* slf) {
 DmResult DmSegment_download(DmSegment* slf, DmLoader* loader) {
 	if (slf == NULL || loader == NULL) {
 		return DmResult_INVALID_ARGUMENT;
+	}
+
+	if (slf->downloaded) {
+		Dm_report(DmLogLevel_INFO, "DmSegment: Skipping download of segment %s: Already downloaded", slf->info.unam);
+		return DmResult_SUCCESS;
 	}
 
 	DmResult rv = DmResult_SUCCESS;
@@ -75,6 +82,7 @@ DmResult DmSegment_download(DmSegment* slf, DmLoader* loader) {
 
 DmGuid const* DmSegment_getGuid(DmSegment const* slf) {
 	if (slf == NULL) {
+		Dm_report(DmLogLevel_ERROR, "DmSegment: NULL passed to `DmSegment_getGuid`");
 		return NULL;
 	}
 
@@ -83,6 +91,7 @@ DmGuid const* DmSegment_getGuid(DmSegment const* slf) {
 
 char const* DmSegment_getName(DmSegment const* slf) {
 	if (slf == NULL) {
+		Dm_report(DmLogLevel_ERROR, "DmSegment: NULL passed to `DmSegment_getName`");
 		return NULL;
 	}
 
@@ -91,6 +100,7 @@ char const* DmSegment_getName(DmSegment const* slf) {
 
 double DmSegment_getLength(DmSegment const* slf) {
 	if (slf == NULL) {
+		Dm_report(DmLogLevel_ERROR, "DmSegment: NULL passed to `DmSegment_getLength`");
 		return 0;
 	}
 
