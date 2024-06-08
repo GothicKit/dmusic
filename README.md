@@ -10,6 +10,26 @@ Soundtracks tested and verified to work (somewhat) correctly:
 If you tested other games, please let me know. If you own any games with `.dls`, `.sty` and `.sgt` files in the data
 folders, and you want to contribute, please contact me as well or open an issue.
 
+> [!IMPORTANT]
+> **A C# wrapper package is also available at [GothicKit/dmusic-cs](https://github.com/GothicKit/dmusic-cs).**
+
+## Building
+
+To build this project, you will need a C11-capable C compiler (like `gcc` or `clang`) and CMake 3.10 or newer. Linux,
+macOS and Windows are supported, but I can only assist with compilation error in a limited fashion on platforms other
+than Linux.
+
+On Linux, you can build the project like this (macOS and Windows might work differently):
+
+```
+cmake -B build -DDM_ENABLE_ASAN=OFF -DDM_BUILD_EXAMPLES=ON
+cmake --build build
+```
+(set `-DDM_BUILD_EXAMPLES=OFF`, if the example fails to compile)
+
+You will find the library and executable files in the `build` and `build/examples` directories. Note that the example
+only works on systems providing the `<unistd.h>` and `<sys/stat.h>` headers.
+
 ## Example
 
 Here's how you play back a segment. This example works on POSIX only since it uses `<sys/stat.h>` for the file resolver.
