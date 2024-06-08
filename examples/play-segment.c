@@ -19,7 +19,11 @@ int main(int argc, char** argv) {
 	Dm_setLoggerDefault(DmLogLevel_INFO);
 
 	if (argc < 2) {
-		puts("Please provide a segment name\n");
+		puts("Usage: play-segment <PATH>\n\n");
+		puts("Plays a DirectMusic Segment continuously to the system's default\n"
+		     "sound device. You will need to run the program in the same working\n"
+		     "directory as your segment and its associated files (.sgt, .sty and\n"
+		     ".dls), so that they can be discovered and loaded correctly.\n");
 		return -1;
 	}
 
