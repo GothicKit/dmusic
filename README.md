@@ -7,6 +7,15 @@ Soundtracks tested and verified to work (somewhat) correctly:
  * Gothic
  * Gothic II (+ Night of the Raven)
 
+<figure>
+  <figcaption>Gothic II's "Khorinis Day Standard" theme rendered using this library:</figcaption>
+	
+  https://github.com/GothicKit/dmusic/assets/20187490/56d14b3f-6fab-427f-88b8-959f100b6c79
+
+  Download the MP3 [here](https://raw.githubusercontent.com/GothicKit/dmusic/main/support/KH_DayStd.mp3).
+</figure>
+
+
 If you tested other games, please let me know. If you own any games with `.dls`, `.sty` and `.sgt` files in the data
 folders, and you want to contribute, please contact me as well or open an issue.
 
