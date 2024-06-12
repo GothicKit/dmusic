@@ -7,6 +7,7 @@ on:
       - vendor/**
       - support/*.cmake
       - CMakeLists.txt
+      - .github/workflows/build.yml
 jobs:
   linux:
     name: "Linux"
@@ -95,4 +96,37 @@ jobs:
         uses: 'actions/upload-artifact@v3'
         with:
           name: 'Windows x86-64 DLL'
+          path: 'build/dmusic.dll'
+  windows-32:
+    name: "Windows (32-bit)"
+    runs-on: 'windows-latest'
+    defaults:
+      run:
+        shell: 'msys2 {0}'
+    steps:
+      - uses: 'actions/checkout@v3'
+        with:
+          submodules: 'recursive'
+      - name: 'Install MinGW'
+        uses: 'msys2/setup-msys2@v2'
+        with:
+          msystem: 'mingw32'
+          update: true
+          install: >-
+            git
+            make
+          pacboy: >-
+            toolchain:p
+            cmake:p
+            ninja:p
+      - name: 'Configure'
+        run: 'cmake -B build -G "MSYS Makefiles" -DCMAKE_BUILD_TYPE=Release'
+      - name: 'Build'
+        run: 'cmake --build build --config Release -j 2'
+      - name: 'Rename Artifact'
+        run: 'mv build/libdmusic.dll build/dmusic.dll'
+      - name: 'Publish Library'
+        uses: 'actions/upload-artifact@v3'
+        with:
+          name: 'Windows i386 DLL'
           path: 'build/dmusic.dll'
