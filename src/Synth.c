@@ -86,7 +86,26 @@ static DmResult DmSynth_updateFonts(DmSynth* slf, DmBand* band) {
 			tsf_set_output(new_fnt.syn, TSF_STEREO_INTERLEAVED, (int) slf->rate, 0);
 			tsf_set_volume(new_fnt.syn, slf->volume);
 
-			rv = DmSynthFontArray_add(&slf->fonts, new_fnt);
+			if (slf->channels_len > 0) {
+				// If we add an element to the font array, we need to adjust the cached fonts for each channel,
+				// since a resize might re-allocate the array and thus break existing references to the old array.
+				DmSynthFont* old = slf->fonts.data;
+				rv = DmSynthFontArray_add(&slf->fonts, new_fnt);
+
+				if (rv != DmResult_SUCCESS) {
+					return rv;
+				}
+
+				// This is the offset between the old and new arrays; we need to add it to the old references
+				// to bring them back into scope.
+				size_t offset = slf->fonts.data - old;
+				for (size_t r = 0; r < slf->channels_len; ++r) {
+					slf->channels[r].font += offset;
+				}
+			} else {
+				rv = DmSynthFontArray_add(&slf->fonts, new_fnt);
+			}
+
 			if (rv != DmResult_SUCCESS) {
 				return rv;
 			}
