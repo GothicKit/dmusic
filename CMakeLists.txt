@@ -5,6 +5,7 @@ set(CMAKE_C_STANDARD 11)
 
 option(DM_ENABLE_ASAN "DirectMusic: Enable sanitizers in debug builds." ON)
 option(DM_BUILD_EXAMPLES "DirectMusic: Build the examples." OFF)
+option(DM_BUILD_STATIC "DirectMusic: Build as a static library instead of a shared one." OFF)
 
 add_subdirectory(vendor)
 
@@ -45,7 +46,12 @@ list(APPEND _DM_SOURCE
 include(support/BuildSupport.cmake)
 bs_select_cflags(${DM_ENABLE_ASAN} _DM_COMPILE_FLAGS _DM_LINK_FLAGS)
 
-add_library(dmusic SHARED)
+if (${DM_BUILD_STATIC})
+    add_library(dmusic STATIC)
+else ()
+    add_library(dmusic SHARED)
+endif ()
+
 target_sources(dmusic PRIVATE ${_DM_SOURCE})
 target_include_directories(dmusic PUBLIC include)
 target_include_directories(dmusic PRIVATE src)
