@@ -48,6 +48,7 @@ bs_select_cflags(${DM_ENABLE_ASAN} _DM_COMPILE_FLAGS _DM_LINK_FLAGS)
 
 if (${DM_BUILD_STATIC})
     add_library(dmusic STATIC)
+    target_compile_definitions(dmusic PUBLIC DM_STATIC=1)
 else ()
     add_library(dmusic SHARED)
 endif ()

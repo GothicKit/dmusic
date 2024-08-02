@@ -11,25 +11,31 @@
 	#define DM_EXTERN
 #endif
 
-#if defined(_WIN32) || defined(__CYGWIN__)
-	#ifdef DM_BUILD
-		#ifdef __GNUC__
-			#define DMAPI DM_EXTERN __attribute__((dllexport))
+#ifndef DM_STATIC
+	#if defined(_WIN32) || defined(__CYGWIN__)
+		#ifdef DM_BUILD
+			#ifdef __GNUC__
+				#define DMAPI DM_EXTERN __attribute__((dllexport))
+			#else
+				#define DMAPI DM_EXTERN __declspec(dllexport)
+			#endif
 		#else
-			#define DMAPI DM_EXTERN __declspec(dllexport)
+			#ifdef __GNUC__
+				#define DMAPI DM_EXTERN __attribute__((dllimport))
+			#else
+				#define DMAPI DM_EXTERN __declspec(dllimport)
+			#endif
 		#endif
+		#define DMINT
 	#else
-		#ifdef __GNUC__
-			#define DMAPI DM_EXTERN __attribute__((dllimport))
-		#else
-			#define DMAPI DM_EXTERN __declspec(dllimport)
-		#endif
+		#define DMAPI DM_EXTERN __attribute__((visibility("default")))
+		#define DMINT DM_EXTERN __attribute__((visibility("hidden")))
 	#endif
-	#define DMINT
 #else
-	#define DMAPI DM_EXTERN __attribute__((visibility("default")))
-	#define DMINT DM_EXTERN __attribute__((visibility("hidden")))
+	#define DMAPI DM_EXTERN
+	#define DMINT DM_EXTERN
 #endif
+
 /// \endcond
 
 /// \defgroup DmCommonGroup Common
