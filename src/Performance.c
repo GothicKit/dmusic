@@ -4,6 +4,10 @@
 #include <math.h>
 #include <stdlib.h>
 
+#ifndef M_PI
+	#define M_PI 3.14159
+#endif
+
 enum {
 	DmInt_DEFAULT_TEMPO = 100,
 	DmInt_DEFAULT_SAMPLE_RATE = 44100,
