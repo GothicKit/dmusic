@@ -1,6 +1,6 @@
 # DirectMusic — A re-implementation.
 
-This project aims to re-implement Microsoft's long-deprecated DirectMusic API available in early Direct3D and DirectX
+This project aims to be a modern replacement for Microsoft's long-deprecated DirectMusic API available in early Direct3D and DirectX
 versions. It is currently under heavy development at this time and might be unstable for some use-cases.
 
 Soundtracks tested and verified to work (somewhat) correctly:
