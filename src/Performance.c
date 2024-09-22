@@ -531,6 +531,8 @@ static DmResult DmPattern_generateCurveMessages(DmPart* part,
 			break;
 		case DmCurveType_MONO_AFTERTOUCH:
 		case DmCurveType_POLY_AFTERTOUCH:
+			// NOTE(lmichaelis): This is MIDI CC 2 (Breath Controller) and MIDI CC 4 (Foot Pedal). Neither are
+			//                   implemented in TSF and only CC 2 is implemented in FluidSynth with some caveats.
 			Dm_report(DmLogLevel_WARN,
 			          "DmPerformance: Curve type %d not implemented (midi channel pressure)",
 			          curve.event_type);
