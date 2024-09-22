@@ -184,7 +184,7 @@ static DmResult DmSynth_assignInstrumentChannels(DmSynth* slf, DmBand* band) {
 		}
 
 		if (ins->options & DmInstrument_VALID_VOLUME) {
-			float vol = (float) ins->volume / DmInt_MIDI_MAX;
+			float vol = (float) ins->volume / (float) DmInt_MIDI_MAX;
 			tsf_channel_set_volume(fnt->syn, (int) ins->channel, vol);
 			chan->reset_volume = vol;
 		}
