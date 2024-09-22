@@ -287,13 +287,13 @@ static DmResult Dm_createHydra(DmDls* dls, struct tsf_hydra* hydra, float** pcm,
 	uint32_t imod_ndx = 0;
 	uint32_t shdr_ndx = 0;
 	for (size_t i = 0; i < dls->instrument_count; ++i) {
-		DmDlsInstrument* ins = &dls->instruments[i];
+		// TODO(lmichaelis): Dirty fix for drum kit problems. We add the instruments in reverse, so that TSF always
+		//                   behaves as-if instruments later in the sequence override previous instruments. This allows
+		//                   Gothic 2 to use drum kits as intended and prevents Gothic 1 from playing from the
+		//                   Metronom.dls file when it shouldn't. This works in conjunction with the channel selection
+		//                   from DmInstrument_getDlsInstrument.
+		DmDlsInstrument* ins = &dls->instruments[dls->instrument_count - 1 - i];
 		uint32_t bank = ins->bank;
-
-		// Ignore drum kits for now.
-		if (ins->bank & DmDls_DRUM_KIT) {
-			bank = 999;
-		}
 
 		strncpy(hydra->phdrs[i].presetName, ins->info.inam, 19);
 		hydra->phdrs[i].bank = bank;

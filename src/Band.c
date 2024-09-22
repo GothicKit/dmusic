@@ -52,16 +52,16 @@ DmDlsInstrument* DmInstrument_getDlsInstrument(DmInstrument* slf) {
 	uint32_t patch = slf->patch & 0xFFU;
 
 	DmDlsInstrument* ins = NULL;
-	for (size_t i = 0; i < slf->dls->instrument_count; ++i) {
+	for (long long i = slf->dls->instrument_count; i >= 0; --i) {
 		ins = &slf->dls->instruments[i];
 
-		// TODO(lmichaelis): We need to ignore drum kits for now since I don't know how to handle them properly
-		if (ins->bank & DmDls_DRUM_KIT) {
-			continue;
-		}
-
 		// If it's the correct instrument, return it.
-		if (ins->bank == bank && ins->patch == patch) {
+		// TODO(lmichaelis): Dirty fix for drum kit problems. Instead of choosing the first valid DLS instrument, we
+		//                   chose the last valid one. This acts as if later instruments override previous ones and
+		//                   thus prevents problems where the same channel is re-used multiple times, specifically in
+		//                   Gothic 1, which assigns a drum kit and melodic instrument to the same channel. This works
+		//                   in conjunction with the TSF creation in Dm_createHydra to prevent drum kit issues in G1.
+		if ((ins->bank & 127) == bank && ins->patch == patch) {
 			return ins;
 		}
 	}
