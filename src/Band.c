@@ -99,12 +99,21 @@ DmResult DmBand_download(DmBand* slf, DmLoader* loader) {
 			continue;
 		}
 
-		// TODO(lmichaelis): The General MIDI, Roland GS and Yamaha XG collections are not supported.
-		if (instrument->options & DmInstrument_PREDEFINED_COLLECTION) {
+		if (instrument->options & DmInstrument_GENERAL_MIDI) {
+			instrument->reference.file = "gm.dls";
 			Dm_report(DmLogLevel_INFO,
-			          "DmBand: Cannot download instrument '%s': GM, GS and XG collections not available",
+			          "DmBand: Trying to download instrument '%s' from the general MIDI collection (gm.dls)",
 			          instrument->reference.name);
-			continue;
+		} else if (instrument->options & DmInstrument_ROLAND_GS) {
+			instrument->reference.file = "gs.dls";
+			Dm_report(DmLogLevel_INFO,
+			          "DmBand: Trying to download instrument '%s' from the Roland GS collection (gs.dls)",
+			          instrument->reference.name);
+		} else if (instrument->options & DmInstrument_YAMAHA_XG) {
+			instrument->reference.file = "xg.dls";
+			Dm_report(DmLogLevel_INFO,
+			          "DmBand: Trying to download instrument '%s' from the Yamaha XG collection (xg.dls)",
+			          instrument->reference.name);
 		}
 
 		rv = DmLoader_getDownloadableSound(loader, &instrument->reference, &instrument->dls);
