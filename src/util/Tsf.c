@@ -13,9 +13,22 @@ static int16_t sf2SecondsToTimeCents(double secs) {
 	return (int16_t) (1200.0 * log2(secs));
 }
 
+static double dlsAbsolutePitchCentsToHz(int32_t pc) {
+	return exp2(
+		((double) pc / 65536.0) / 1200.0
+	) * 440.0;
+}
+
+static int16_t sf2HzToCents(double hz) {
+	return (int16_t) 1200.0 * log2(hz / 8.176);
+}
+
+
 enum {
 	kInitialFilterFc = 8,
 	kPan = 17,
+	kDelayModLFO = 21,
+	kFreqModLFO = 22,
 	kAttackModEnv = 26,
 	kDecayModEnv = 28,
 	kSustainModEnv = 29,
@@ -27,6 +40,7 @@ enum {
 	kInstrument = 41,
 	kKeyRange = 43,
 	kVelRange = 44,
+	kVelocity = 47,
 	kInitialAttenuation = 48,
 	kSampleID = 53,
 	kSampleModes = 54,
@@ -45,7 +59,7 @@ static size_t DmSynth_insertGeneratorArticulators(struct tsf_hydra_igen* gens, D
 		bool is_modulator = con->source != DmDlsArticulatorSource_NONE ||
 		    con->transform != DmDlsArticulatorTransform_NONE || con->control != 0;
 		if (is_modulator) {
-			Dm_report(DmLogLevel_WARN, "DmSynth: DLS Modulators are not supported");
+			// Dm_report(DmLogLevel_WARN, "DmSynth: DLS Modulators are not supported");
 			continue;
 		}
 
@@ -131,6 +145,39 @@ static size_t DmSynth_insertGeneratorArticulators(struct tsf_hydra_igen* gens, D
 			gen->genOper = kInitialFilterFc;
 			gen->genAmount.shortAmount = sf2SecondsToTimeCents(dlsTimeCentsToSeconds(con->scale));
 			break;
+		case DmDlsArticulatorDestination_LFO_FREQUENCY:
+			// SF2 Spec:
+			//   This is the frequency, in absolute cents, of the Modulation LFO’s triangular period.
+			//   A value of zero indicates a frequency of 8.176 Hz. A negative value indicates a
+			//   frequency less than 8.176 Hz; a positive value a frequency greater than 8.176 Hz.
+			//   For example, a frequency of 10 mHz would be 1200log2(.01/8.176) = -11610.
+			gen->genOper = kFreqModLFO;
+			gen->genAmount.shortAmount = sf2HzToCents(dlsAbsolutePitchCentsToHz(con->scale));
+			break;
+		case DmDlsArticulatorDestination_LFO_START_DELAY:
+			// SF2 Spec:
+			//     This is the delay time, in absolute timecents, from key on until the Modulation LFO
+			//     begins its upward ramp from zero value. A value of 0 indicates a 1 second delay. A
+			//     negative value indicates a delay less than one second and a positive value a delay
+			//     longer than one second. The most negative number (-32768) conventionally
+			//     indicates no delay. For example, a delay of 10 msec would be 1200log2(.01) = -7973.
+			gen->genOper = kDelayModLFO;
+			gen->genAmount.shortAmount = sf2SecondsToTimeCents(dlsTimeCentsToSeconds(con->scale));
+			break;
+		case DmDlsArticulatorDestination_KEY_ON_VELOCITY:
+			// SF2 Spec:
+			//     This enumerator forces the MIDI velocity to effectively be interpreted as the value
+			//     given. This generator can only appear at the instrument level. Valid values are from
+			//     0 to 127.
+			gen->genOper = kVelocity;
+			gen->genAmount.wordAmount = con->scale;
+			break;
+		case DmDlsArticulatorDestination_EG1_RESERVED:
+			Dm_report(DmLogLevel_DEBUG, "DmSynth: Use of reserved articulator destination `CONN_DST_EG1_RESERVED`, ignoring!");
+			continue;
+		case DmDlsArticulatorDestination_EG2_RESERVED:
+			Dm_report(DmLogLevel_DEBUG, "DmSynth: Use of reserved articulator destination `CONN_DST_EG2_RESERVED`, ignoring!");
+			continue;
 		default:
 			Dm_report(DmLogLevel_WARN, "DmSynth: Unknown Instrument Generator: %d", con->destination);
 			continue;
