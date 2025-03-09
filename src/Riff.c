@@ -40,6 +40,11 @@ bool DmRiff_readChunk(DmRiff* slf, DmRiff* out) {
 		return false;
 	}
 
+	// Cover odd case where ISFT reads to end of file,
+	// but chunk reports over-read
+	if (slf->pos > slf->len) {
+		return false;
+	}
 	size_t remaining = slf->len - slf->pos;
 	if (remaining < sizeof(uint32_t) * 2) {
 		return false;
