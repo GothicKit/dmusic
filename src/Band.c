@@ -52,7 +52,7 @@ DmDlsInstrument* DmInstrument_getDlsInstrument(DmInstrument* slf) {
 	uint32_t patch = slf->patch & 0xFFU;
 
 	DmDlsInstrument* ins = NULL;
-	for (long long i = slf->dls->instrument_count; i >= 0; --i) {
+	for (long long i = slf->dls->instrument_count-1; i >= 0; --i) {
 		ins = &slf->dls->instruments[i];
 
 		// If it's the correct instrument, return it.

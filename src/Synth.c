@@ -100,7 +100,9 @@ static DmResult DmSynth_updateFonts(DmSynth* slf, DmBand* band) {
 				// to bring them back into scope.
 				size_t offset = slf->fonts.data - old;
 				for (size_t r = 0; r < slf->channels_len; ++r) {
-					slf->channels[r].font += offset;
+					if (slf->channels[r].font != NULL) {
+						slf->channels[r].font += offset;
+					}
 				}
 			} else {
 				rv = DmSynthFontArray_add(&slf->fonts, new_fnt);
