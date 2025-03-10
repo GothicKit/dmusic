@@ -23,7 +23,7 @@ jobs:
       - name: 'Build'
         run: 'cmake --build build --config Release'
       - name: 'Publish Library'
-        uses: 'actions/upload-artifact@v3'
+        uses: 'actions/upload-artifact@v4'
         with:
           name: 'Linux x86-64 Shared Object'
           path: 'build/libdmusic*'
@@ -41,7 +41,7 @@ jobs:
       - name: 'Build'
         run: 'cmake --build build --config Release'
       - name: 'Publish Library'
-        uses: 'actions/upload-artifact@v3'
+        uses: 'actions/upload-artifact@v4'
         with:
           name: 'ARM x64 Shared Object'
           path: 'build/libdmusic*'
@@ -60,7 +60,7 @@ jobs:
       - name: 'Build'
         run: 'cmake --build build --config Release'
       - name: 'Publish Library'
-        uses: 'actions/upload-artifact@v3'
+        uses: 'actions/upload-artifact@v4'
         with:
           name: 'MacOS x86-64 DyLib'
           path: 'build/libdmusic*'
@@ -93,7 +93,7 @@ jobs:
       - name: 'Rename Artifact'
         run: 'mv build/libdmusic.dll build/dmusic.dll'
       - name: 'Publish Library'
-        uses: 'actions/upload-artifact@v3'
+        uses: 'actions/upload-artifact@v4'
         with:
           name: 'Windows x86-64 DLL'
           path: 'build/dmusic.dll'
@@ -126,7 +126,7 @@ jobs:
       - name: 'Rename Artifact'
         run: 'mv build/libdmusic.dll build/dmusic.dll'
       - name: 'Publish Library'
-        uses: 'actions/upload-artifact@v3'
+        uses: 'actions/upload-artifact@v4'
         with:
           name: 'Windows i386 DLL'
           path: 'build/dmusic.dll'
