@@ -35,6 +35,10 @@ bool DmRiff_is(DmRiff const* slf, uint32_t id, uint32_t typ) {
 	return slf->id == id && slf->typ == typ;
 }
 
+bool DmRiff_isDone(DmRiff const* slf) {
+	return slf->pos >= slf->len;
+}
+
 bool DmRiff_readChunk(DmRiff* slf, DmRiff* out) {
 	if (slf == NULL || out == NULL) {
 		return false;

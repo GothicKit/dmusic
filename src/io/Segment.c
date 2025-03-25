@@ -175,6 +175,9 @@ static DmResult DmSegment_parseBandItem(DmMessage_Band* slf, DmRiff* rif) {
 	while (DmRiff_readChunk(rif, &cnk)) {
 		if (DmRiff_is(&cnk, DM_FOURCC_BDIH, 0)) {
 			DmRiff_readDword(&cnk, &slf->time);
+			if (slf->time == 0xffffffff) {
+				slf->time = 0;
+			}
 		} else if (DmRiff_is(&cnk, DM_FOURCC_RIFF, DM_FOURCC_DMBD)) {
 			DmResult rv = DmBand_create(&slf->band);
 			if (rv != DmResult_SUCCESS) {
@@ -248,6 +251,106 @@ static void DmSegment_parseStyleItem(DmMessage_Style* slf, DmRiff* rif) {
 	}
 }
 
+extern void DmStyle_parsePartReference(DmPartReference* slf, DmRiff* rif);
+extern DmResult DmStyle_parsePart(DmPart* slf, DmRiff* rif);
+
+static DmResult DmSegment_parsePattern(DmPattern* slf, DmStyle* sty, DmRiff* rif) {
+	DmRiff cnk;
+	while (DmRiff_readChunk(rif, &cnk)) {
+		if (DmRiff_is(&cnk, DM_FOURCC_PTNH, 0)) {
+			DmTimeSignature_parse(&slf->time_signature, &cnk);
+			DmRiff_readByte(&cnk, &slf->groove_bottom);
+			DmRiff_readByte(&cnk, &slf->groove_top);
+			DmRiff_readWord(&cnk, &slf->embellishment);
+			DmRiff_readWord(&cnk, &slf->length_measures);
+		} else if (DmRiff_is(&cnk, DM_FOURCC_LIST, DM_FOURCC_UNFO)) {
+			DmUnfo_parse(&slf->info, &cnk);
+		} else if (DmRiff_is(&cnk, DM_FOURCC_LIST, DM_FOURCC_PART)) {
+			DmPart part;
+			DmPart_init(&part);
+
+			DmResult rv = DmStyle_parsePart(&part, &cnk);
+			if (rv != DmResult_SUCCESS) {
+				DmPart_free(&part);
+				return rv;
+			}
+
+			rv = DmPartList_add(&sty->parts, part);
+			if (rv != DmResult_SUCCESS) {
+				return rv;
+			}
+		} else if (DmRiff_is(&cnk, DM_FOURCC_RHTM, 0)) {
+			slf->rhythm_len = cnk.len / 4;
+			slf->rhythm = Dm_alloc(cnk.len);
+			if (slf->rhythm == NULL) {
+				return DmResult_MEMORY_EXHAUSTED;
+			}
+
+			for (size_t i = 0; i < slf->rhythm_len; ++i) {
+				DmRiff_readDword(&cnk, &slf->rhythm[i]);
+			}
+		} else if (DmRiff_is(&cnk, DM_FOURCC_LIST, DM_FOURCC_PREF)) {
+			DmPartReference pref;
+			DmPartReference_init(&pref);
+			DmStyle_parsePartReference(&pref, &cnk);
+
+			DmResult rv = DmPartReferenceList_add(&slf->parts, pref);
+			if (rv != DmResult_SUCCESS) {
+				return rv;
+			}
+		}
+
+		DmRiff_reportDone(&cnk);
+	}
+
+	return DmResult_SUCCESS;
+}
+
+static DmResult DmSegment_parsePatternList(DmStyle* slf, DmRiff* rif) {
+    DmPattern pttn;
+    DmPattern_init(&pttn);
+
+    DmResult rv = DmSegment_parsePattern(&pttn, slf, rif);
+    if (rv != DmResult_SUCCESS) {
+        DmPattern_free(&pttn);
+        return rv;
+    }
+
+    rv = DmPatternList_add(&slf->patterns, pttn);
+    return rv;
+}
+
+static DmResult DmSegment_parsePatternTrack(DmMessageList* slf, DmRiff* rif) {
+	DmMessage msg;
+
+	DmStyle* sty;
+	DmResult rv = DmStyle_create(&sty);
+	if (rv != DmResult_SUCCESS) {
+		return rv;
+	}
+
+	DmRiff cnk;
+	while (DmRiff_readChunk(rif, &cnk)) {
+		if (DmRiff_is(&cnk, DM_FOURCC_STYH, 0)) {
+			DmTimeSignature_parse(&sty->time_signature, &cnk);
+			DmRiff_readDouble(&cnk, &sty->tempo);
+		} else if (DmRiff_is(&cnk, DM_FOURCC_LIST, DM_FOURCC_PTTN)) {
+			rv = DmSegment_parsePatternList(sty, &cnk);
+		}
+
+        if (rv != DmResult_SUCCESS) {
+            return rv;
+        }
+
+		DmRiff_reportDone(&cnk);
+	}
+
+	msg.type = DmMessage_STYLE;
+	msg.style.time = 0;
+	msg.style.style = sty;
+	return DmMessageList_add(slf, msg);
+}
+
 static DmResult DmSegment_parseStyleTrack(DmMessageList* slf, DmRiff* rif) {
 	DmMessage msg;
 	DmRiff cnk;
@@ -258,6 +361,139 @@ static DmResult DmSegment_parseStyleTrack(DmMessageList* slf, DmRiff* rif) {
 			DmResult rv = DmMessageList_add(slf, msg);
 			if (rv != DmResult_SUCCESS) {
 				return rv;
+			}
+		}
+
+		DmRiff_reportDone(&cnk);
+	}
+
+	return DmResult_SUCCESS;
+}
+
+static DmResult DmSegment_parseTimingTrack(DmMessageList* slf, DmRiff* rif) {
+
+	DmRiff cnk;
+	while (DmRiff_readChunk(rif, &cnk)) {
+		if (DmRiff_is(&cnk, DM_FOURCC_tims, 0)) {
+            uint32_t item_size = 0;
+            DmRiff_readDword(&cnk, &item_size);
+            DmMessage msg;
+            uint32_t item_count = (cnk.len - cnk.pos) / item_size;
+            for (uint32_t i = 0; i < item_count; ++i) {
+                uint32_t end_position = cnk.pos + item_size;
+
+                msg.type = DmMessage_SIGNATURE;
+                DmRiff_readDword(&cnk, &msg.signature.time);
+                DmRiff_readByte(&cnk, &msg.signature.signature.beats_per_measure);
+                DmRiff_readByte(&cnk, &msg.signature.signature.beat);
+                DmRiff_readWord(&cnk, &msg.signature.signature.grids_per_beat);
+
+                DmResult rv = DmMessageList_add(slf, msg);
+                if (rv != DmResult_SUCCESS) {
+                    return rv;
+                }
+
+                cnk.pos = end_position;
+            }
+		}
+
+		DmRiff_reportDone(&cnk);
+	}
+
+
+	return DmResult_SUCCESS;
+}
+
+static DmResult DmSegment_parseSequenceItem(DmMessageList* slf, DmRiff* rif) {
+	DmMessage msg;
+	DmRiff_readDword(rif, &msg.time);
+
+	uint32_t duration = 0;
+	DmRiff_readDword(rif, &duration);
+
+	uint32_t channel = 0;
+	DmRiff_readDword(rif, &channel);
+
+	int16_t offset = 0;
+	DmRiff_readShort(rif, &offset);
+
+	uint8_t midi_status = 0;
+	uint8_t midi_byte0 = 0;
+	uint8_t midi_byte1 = 0;
+	DmRiff_readByte(rif, &midi_status);
+	DmRiff_readByte(rif, &midi_byte0);
+	DmRiff_readByte(rif, &midi_byte1);
+
+	switch (midi_status & 0xF0) {
+	case 0x80: /* Note Off */
+		msg.type = DmMessage_NOTE;
+		msg.note.channel = channel;
+		msg.note.note = midi_byte0;
+		msg.note.velocity = midi_byte1;
+		msg.note.on = false;
+		msg.time = msg.time + offset;
+		DmMessageList_add(slf, msg);
+
+		if (duration > 0) {
+			msg.note.on = true;
+			msg.time = msg.time + duration;
+			DmMessageList_add(slf, msg);
+		}
+
+		break;
+	case 0x90: /* Note On */
+		msg.type = DmMessage_NOTE;
+		msg.note.channel = channel;
+		msg.note.note = midi_byte0;
+		msg.note.velocity = midi_byte1;
+		msg.note.on = true;
+		msg.time = msg.time + offset;
+		DmMessageList_add(slf, msg);
+
+		if (duration > 0) {
+			msg.note.on = false;
+			msg.time = msg.time + duration;
+			DmMessageList_add(slf, msg);
+		}
+		break;
+	default:
+		Dm_report(DmLogLevel_WARN, "DmSegment: Unknown sequence item MIDI event: %d", midi_status & 0xF0);
+		return DmResult_INVALID_STATE;
+	}
+
+	return DmResult_SUCCESS;
+}
+
+static DmResult DmSegment_parseCurveItem(DmMessageList* slf, DmRiff* rif) {
+	(void) slf;
+	(void) rif;
+	return DmResult_SUCCESS;
+}
+
+static DmResult DmSegment_parseSequenceTrack(DmMessageList* slf, DmRiff* rif) {
+	DmRiff cnk;
+	while (DmRiff_readChunk(rif, &cnk)) {
+		if (DmRiff_is(&cnk, DM_FOURCC_EVTL, 0)) {
+			uint32_t item_size = 0;
+			DmRiff_readDword(&cnk, &item_size);
+
+			uint32_t item_count = (cnk.len - cnk.pos) / item_size;
+			for (uint32_t i = 0; i < item_count; ++i) {
+				uint32_t end_position = cnk.pos + item_size;
+
+				DmSegment_parseSequenceItem(slf, &cnk);
+				cnk.pos = end_position;
+			}
+		} else if (DmRiff_is(&cnk, DM_FOURCC_CURL, 0)) {
+			uint32_t item_size = 0;
+			DmRiff_readDword(&cnk, &item_size);
+
+			uint32_t item_count = (cnk.len - cnk.pos) / item_size;
+			for (uint32_t i = 0; i < item_count; ++i) {
+				uint32_t end_position = cnk.pos + item_size;
+
+				DmSegment_parseCurveItem(slf, &cnk);
+				cnk.pos = end_position;
 			}
 		}
 
@@ -293,7 +529,16 @@ static DmResult DmSegment_parseTrack(DmMessageList* slf, DmRiff* rif) {
 			rv = DmSegment_parseStyleTrack(slf, &cnk);
 		} else if (DmRiff_is(&cnk, DM_FOURCC_RIFF, DM_FOURCC_DMBT)) {
 			rv = DmSegment_parseBandTrack(slf, &cnk);
+		} else if (DmRiff_is(&cnk, DM_FOURCC_SEQT, 0)) {
+			rv = DmSegment_parseSequenceTrack(slf, &cnk);
+		} else if (DmRiff_is(&cnk, DM_FOURCC_LIST, DM_FOURCC_TIMS)) {
+			rv = DmSegment_parseTimingTrack(slf, &cnk);
+		} else if (DmRiff_is(&cnk, DM_FOURCC_RIFF, DM_FOURCC_DMPT)) {
+			rv = DmSegment_parsePatternTrack(slf, &cnk);
 		}
+
+		// TODO:
+		// https://documentation.help/DirectMusic/timesignaturetracklist.htm
 
 		if (rv != DmResult_SUCCESS) {
 			return rv;

@@ -154,8 +154,9 @@ static DmResult DmDls_parseInstrumentRegionList(DmDlsInstrument* slf, DmRiff* ri
 			return DmResult_FILE_CORRUPT;
 		}
 
-		if (!DmRiff_is(&cnk, DM_FOURCC_LIST, DM_FOURCC_RGN_)) {
-			return DmResult_FILE_CORRUPT;
+		if (!DmRiff_is(&cnk, DM_FOURCC_LIST, DM_FOURCC_RGN_) && !DmRiff_is(&cnk, DM_FOURCC_LIST, DM_FOURCC_RGN2)) {
+            DmRiff_reportDone(&cnk);
+            continue;
 		}
 
 		DmDlsRegion_init(&slf->regions[i]);

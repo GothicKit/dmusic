@@ -345,6 +345,7 @@ typedef enum DmMessageType {
 	DmMessage_TEMPO,
 	DmMessage_CHORD,
 	DmMessage_COMMAND,
+	DmMessage_SIGNATURE,
 } DmMessageType;
 
 typedef struct DmMessage_Tempo {
@@ -426,6 +427,13 @@ typedef struct DmMessage_Control {
 	float reset_value;
 } DmMessage_Control;
 
+typedef struct DmMessage_TimeSignature {
+	DmMessageType type;
+	uint32_t time;
+
+	DmTimeSignature signature;
+} DmMessage_TimeSignature;
+
 typedef struct DmMessage_PitchBend {
 	DmMessageType type;
 	uint32_t time;
@@ -451,6 +459,7 @@ typedef union DmMessage {
 	DmMessage_SegmentChange segment;
 	DmMessage_Note note;
 	DmMessage_Control control;
+	DmMessage_TimeSignature signature;
 	DmMessage_PitchBend pitch_bend;
 } DmMessage;
 

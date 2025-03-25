@@ -61,7 +61,7 @@ DmResult DmSegment_download(DmSegment* slf, DmLoader* loader) {
 
 		if (msg->type == DmMessage_BAND) {
 			rv = DmBand_download(msg->band.band, loader);
-		} else if (msg->type == DmMessage_STYLE) {
+		} else if (msg->type == DmMessage_STYLE && msg->style.style == NULL) {
 			rv = DmLoader_getStyle(loader, &msg->style.reference, &msg->style.style);
 
 			if (rv != DmResult_SUCCESS) {

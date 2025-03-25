@@ -673,6 +673,12 @@ static void DmPerformance_handleCommandMessage(DmPerformance* slf, DmMessage_Com
 		Dm_report(DmLogLevel_WARN, "DmPerformance: Command message with command %d not implemented", msg->command);
 	}
 
+	// If there is no style ..., well then we can't play from it. This means that the segment likely contains embedded
+	// Sequence Track Data with note information.
+	if (slf->style == NULL) {
+		return;
+	}
+
 	DmPattern* pttn = DmStyle_getRandomPattern(slf->style, slf->groove, msg->command);
 	if (pttn == NULL) {
 		Dm_report(DmLogLevel_INFO, "DmPerformance: No suitable pattern found. Silence ensues ...", msg->command);
@@ -770,6 +776,16 @@ static void DmPerformance_handleMessage(DmPerformance* slf, DmMessage* msg) {
 		}
 
 		DmPerformance_handleSegmentMessage(slf, &msg->segment);
+		break;
+	case DmMessage_SIGNATURE:
+        Dm_report(DmLogLevel_TRACE,
+                  "DmPerformance(Message): time=%d type=signature-change beats-per-measure=%d beat=%d grids-per-beat=%d",
+                  slf->time,
+                  msg->signature.signature.beats_per_measure,
+                  msg->signature.signature.beat,
+                  msg->signature.signature.grids_per_beat);
+
+        slf->time_signature = msg->signature.signature;
 		break;
 	case DmMessage_STYLE:
 		Dm_report(DmLogLevel_TRACE,

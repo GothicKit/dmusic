@@ -34,7 +34,13 @@
 #define DM_FOURCC_CORD DM_FOURCC('c', 'o', 'r', 'd')
 #define DM_FOURCC_CRDH DM_FOURCC('c', 'r', 'd', 'h')
 #define DM_FOURCC_CRDB DM_FOURCC('c', 'r', 'd', 'b')
+#define DM_FOURCC_SEQT DM_FOURCC('s', 'e', 'q', 't')
+#define DM_FOURCC_EVTL DM_FOURCC('e', 'v', 't', 'l')
+#define DM_FOURCC_CURL DM_FOURCC('c', 'u', 'r', 'l')
 #define DM_FOURCC_DMBT DM_FOURCC('D', 'M', 'B', 'T')
+#define DM_FOURCC_DMPT DM_FOURCC('D', 'M', 'P', 'T')
+#define DM_FOURCC_TIMS DM_FOURCC('T', 'I', 'M', 'S')
+#define DM_FOURCC_tims DM_FOURCC('t', 'i', 'm', 's')
 #define DM_FOURCC_LBDL DM_FOURCC('l', 'b', 'd', 'l')
 #define DM_FOURCC_LBND DM_FOURCC('l', 'b', 'n', 'd')
 #define DM_FOURCC_BDIH DM_FOURCC('b', 'd', 'i', 'h')
@@ -50,6 +56,7 @@
 #define DM_FOURCC_INSH DM_FOURCC('i', 'n', 's', 'h')
 #define DM_FOURCC_LRGN DM_FOURCC('l', 'r', 'g', 'n')
 #define DM_FOURCC_RGN_ DM_FOURCC('r', 'g', 'n', ' ')
+#define DM_FOURCC_RGN2 DM_FOURCC('r', 'g', 'n', '2')
 #define DM_FOURCC_RGNH DM_FOURCC('r', 'g', 'n', 'h')
 #define DM_FOURCC_WSMP DM_FOURCC('w', 's', 'm', 'p')
 #define DM_FOURCC_WLNK DM_FOURCC('w', 'l', 'n', 'k')
@@ -121,6 +128,7 @@ DMINT char* Dm_utf16ToUtf8Inline(char* out, uint16_t const* u16);
 
 DMINT bool DmRiff_init(DmRiff* slf, void const* buf, size_t len);
 DMINT bool DmRiff_is(DmRiff const* slf, uint32_t id, uint32_t typ);
+DMINT bool DmRiff_isDone(DmRiff const* slf);
 DMINT bool DmRiff_readChunk(DmRiff* slf, DmRiff* out);
 DMINT uint32_t DmRiff_chunks(DmRiff* slf);
 DMINT void DmRiff_read(DmRiff* slf, void* buf, size_t len);

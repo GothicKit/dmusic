@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT-Modern-Variant
 #include "_Internal.h"
 
-static void DmStyle_parsePartReference(DmPartReference* slf, DmRiff* rif) {
+void DmStyle_parsePartReference(DmPartReference* slf, DmRiff* rif) {
 	DmRiff cnk;
 	while (DmRiff_readChunk(rif, &cnk)) {
 		if (DmRiff_is(&cnk, DM_FOURCC_PRFC, 0)) {
@@ -23,7 +23,7 @@ static void DmStyle_parsePartReference(DmPartReference* slf, DmRiff* rif) {
 	}
 }
 
-static DmResult DmStyle_parsePattern(DmPattern* slf, DmRiff* rif) {
+DmResult DmStyle_parsePattern(DmPattern* slf, DmRiff* rif) {
 	DmRiff cnk;
 	while (DmRiff_readChunk(rif, &cnk)) {
 		if (DmRiff_is(&cnk, DM_FOURCC_PTNH, 0)) {
@@ -162,7 +162,7 @@ static DmResult DmStyle_parsePartCurves(DmPart* part, DmRiff* rif) {
 	return DmResult_SUCCESS;
 }
 
-static DmResult DmStyle_parsePart(DmPart* slf, DmRiff* rif) {
+DmResult DmStyle_parsePart(DmPart* slf, DmRiff* rif) {
 	DmRiff cnk;
 	while (DmRiff_readChunk(rif, &cnk)) {
 		if (DmRiff_is(&cnk, DM_FOURCC_PRTH, 0)) {
