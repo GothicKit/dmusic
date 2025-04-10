@@ -1,192 +1,322 @@
 // Copyright © 2024. GothicKit Contributors
 // SPDX-License-Identifier: MIT-Modern-Variant
 #include "_Internal.h"
-#include <math.h>
 
 #include <tsf.h>
 
-static double dlsTimeCentsToSeconds(int32_t tc) {
-	return exp2((double) tc / (1200.0 * 65536.0));
-}
-
-static int16_t sf2SecondsToTimeCents(double secs) {
-	return (int16_t) (1200.0 * log2(secs));
-}
-
-static double dlsAbsolutePitchCentsToHz(int32_t pc) {
-	return exp2(
-		((double) pc / 65536.0) / 1200.0
-	) * 440.0;
-}
-
-static int16_t sf2HzToCents(double hz) {
-	return (int16_t) 1200.0 * log2(hz / 8.176);
-}
-
+DmArray_DEFINE(SFModulatorList, struct tsf_hydra_imod);
+DmArray_IMPLEMENT(SFModulatorList, struct tsf_hydra_imod, NULL);
+DmArray_DEFINE(SFGeneratorList, struct tsf_hydra_igen);
+DmArray_IMPLEMENT(SFGeneratorList, struct tsf_hydra_igen, NULL);
 
 enum {
+	kStartLoopOffset = 2,
+	kEndLoopOffset = 3,
+	kModLfoToPitch = 5,
+	kVibLfoToPitch = 6,
+	kModEnvToPitch = 7,
 	kInitialFilterFc = 8,
+	kInitialFilterQ = 9,
+	kModLfoToVolume = 13,
+	kChorusSend = 16,
+	kReverbSend = 16,
 	kPan = 17,
 	kDelayModLFO = 21,
 	kFreqModLFO = 22,
+	kDelayVibLFO = 23,
+	kFreqVibLFO = 24,
+	kDelayModEnv = 25,
 	kAttackModEnv = 26,
+	kHoldModEnv = 27,
 	kDecayModEnv = 28,
 	kSustainModEnv = 29,
 	kReleaseModEnv = 30,
+	kDelayVolEnv = 33,
 	kAttackVolEnv = 34,
+	kHoldVolEnv = 35,
 	kDecayVolEnv = 36,
 	kSustainVolEnv = 37,
 	kReleaseVolEnv = 38,
 	kInstrument = 41,
 	kKeyRange = 43,
 	kVelRange = 44,
+	kStartLoopOffsetCoarse = 45,
 	kVelocity = 47,
 	kInitialAttenuation = 48,
+	kEndLoopOffsetCoarse = 50,
+	kFineTune = 52,
 	kSampleID = 53,
 	kSampleModes = 54,
+	kScaleTuning = 56,
 	kExclusiveClass = 57,
+	kOverridingRootKey = 58,
+
+	kNoteOnVelocity = 2,
+	kNoteOnKey = 3,
 
 	kSamplePadding = 46,
+	kNone = 0,
+	kLinear = 0,
 };
 
-static size_t DmSynth_insertGeneratorArticulators(struct tsf_hydra_igen* gens, DmDlsArticulator* art) {
-	size_t count = 0;
-
+static void DmSynth_insertGenerators(SFGeneratorList* gens, DmDlsArticulator* art) {
 	for (size_t k = 0; k < art->connection_count; ++k) {
 		struct DmDlsArticulatorConnection* con = &art->connections[k];
-		struct tsf_hydra_igen* gen = &gens[count];
+		struct tsf_hydra_igen gen;
 
-		bool is_modulator = con->source != DmDlsArticulatorSource_NONE ||
-		    con->transform != DmDlsArticulatorTransform_NONE || con->control != 0;
-		if (is_modulator) {
-			// Dm_report(DmLogLevel_WARN, "DmSynth: DLS Modulators are not supported");
+		// Ignore scaled controlled source articulators because they can't become generators anyway
+		if (con->control != DmDlsArticulatorSource_NONE) {
 			continue;
 		}
 
-		if (art->level != 1) {
-			Dm_report(DmLogLevel_WARN, "DmSynth: DLS Level 2 articulators are not implemented, expect weird results");
+		// Special articulator checks:
+
+		// Mod LFO to pitch
+		if (con->destination == DmDlsArticulatorDestination_PITCH && con->source == DmDlsArticulatorSource_LFO) {
+			gen.genOper = kModLfoToPitch;
+			gen.genAmount.shortAmount = clamp_s32(con->scale >> 16, -1200, 1200);
+			SFGeneratorList_add(gens, gen);
+			continue;
+		}
+
+		// Mod LFO to Gain
+		if (con->destination == DmDlsArticulatorDestination_ATTENUATION && con->source == DmDlsArticulatorSource_LFO) {
+			gen.genOper = kModLfoToVolume;
+			gen.genAmount.shortAmount = clamp_s32(con->scale >> 16, 0, 120);
+			SFGeneratorList_add(gens, gen);
+			continue;
+		}
+
+		// Vib LFO to pitch
+		if (con->destination == DmDlsArticulatorDestination_PITCH && con->source == DmDlsArticulatorSource_VIBRATO) {
+			gen.genOper = kVibLfoToPitch;
+			gen.genAmount.shortAmount = clamp_s32(con->scale >> 16, -1200, 1200);
+			SFGeneratorList_add(gens, gen);
+			continue;
+		}
+
+		// Mod EG to pitch
+		if (con->destination == DmDlsArticulatorDestination_PITCH && con->source == DmDlsArticulatorSource_EG2) {
+			gen.genOper = kModEnvToPitch;
+			gen.genAmount.shortAmount = clamp_s32(con->scale >> 16, -1200, 1200);
+			SFGeneratorList_add(gens, gen);
+			continue;
+		}
+
+		// Key Number to Pitch
+		if (con->destination == DmDlsArticulatorDestination_PITCH && con->source == DmDlsArticulatorSource_KEY_NUMBER) {
+			gen.genOper = kScaleTuning;
+			gen.genAmount.shortAmount = con->scale / 12800 * 100;
+			SFGeneratorList_add(gens, gen);
+			continue;
+		}
+
+		// Ignore other scaled source connection blocks because they'll resolve to modulators instead.
+		if (con->source != DmDlsArticulatorSource_NONE) {
+			continue;
 		}
 
 		switch (con->destination) {
+		case DmDlsArticulatorDestination_PITCH:
+			// Special case: We have to use the `Fine Tune` destination already to apply the sample-inherent
+			//               tuning, so we have to use a modulator here instead.
+			continue;
 		case DmDlsArticulatorDestination_PAN:
-			gen->genOper = kPan;
-			gen->genAmount.shortAmount = (tsf_s16) (con->scale / 65535);
+			gen.genOper = kPan;
+			gen.genAmount.shortAmount = (tsf_s16) (con->scale >> 16);
+			break;
+		case DmDlsArticulatorDestination_CHORUS:
+			gen.genOper = kChorusSend;
+			gen.genAmount.shortAmount = (tsf_s16) (con->scale >> 16);
+			break;
+		case DmDlsArticulatorDestination_REVERB:
+			gen.genOper = kReverbSend;
+			gen.genAmount.shortAmount = (tsf_s16) (con->scale >> 16);
 			break;
 		case DmDlsArticulatorDestination_EG1_ATTACK_TIME:
-			gen->genOper = kAttackVolEnv;
-			gen->genAmount.shortAmount = sf2SecondsToTimeCents(dlsTimeCentsToSeconds(con->scale));
+			gen.genOper = kAttackVolEnv;
+			gen.genAmount.shortAmount = con->scale >> 16;
 			break;
 		case DmDlsArticulatorDestination_EG2_ATTACK_TIME:
-			gen->genOper = kAttackModEnv;
-			gen->genAmount.shortAmount = sf2SecondsToTimeCents(dlsTimeCentsToSeconds(con->scale));
+			gen.genOper = kAttackModEnv;
+			gen.genAmount.shortAmount = con->scale >> 16;
 			break;
 		case DmDlsArticulatorDestination_EG1_DECAY_TIME:
-			gen->genOper = kDecayVolEnv;
-			gen->genAmount.shortAmount = sf2SecondsToTimeCents(dlsTimeCentsToSeconds(con->scale));
+			gen.genOper = kDecayVolEnv;
+			gen.genAmount.shortAmount = con->scale >> 16;
 			break;
 		case DmDlsArticulatorDestination_EG2_DECAY_TIME:
-			gen->genOper = kDecayModEnv;
-			gen->genAmount.shortAmount = sf2SecondsToTimeCents(dlsTimeCentsToSeconds(con->scale));
+			gen.genOper = kDecayModEnv;
+			gen.genAmount.shortAmount = con->scale >> 16;
 			break;
 		case DmDlsArticulatorDestination_EG1_RELEASE_TIME:
-			gen->genOper = kReleaseVolEnv;
-			gen->genAmount.shortAmount = sf2SecondsToTimeCents(dlsTimeCentsToSeconds(con->scale));
+			gen.genOper = kReleaseVolEnv;
+			gen.genAmount.shortAmount = con->scale >> 16;
 			break;
 		case DmDlsArticulatorDestination_EG2_RELEASE_TIME:
-			gen->genOper = kReleaseModEnv;
-			gen->genAmount.shortAmount = sf2SecondsToTimeCents(dlsTimeCentsToSeconds(con->scale));
+			gen.genOper = kReleaseModEnv;
+			gen.genAmount.shortAmount = con->scale >> 16;
+			break;
+		case DmDlsArticulatorDestination_EG1_DELAY_TIME:
+			gen.genOper = kDelayVolEnv;
+			gen.genAmount.shortAmount = con->scale >> 16;
+			break;
+		case DmDlsArticulatorDestination_EG2_DELAY_TIME:
+			gen.genOper = kDelayModEnv;
+			gen.genAmount.shortAmount = con->scale >> 16;
+			break;
+		case DmDlsArticulatorDestination_EG1_HOLD_TIME:
+			gen.genOper = kHoldVolEnv;
+			gen.genAmount.shortAmount = con->scale >> 16;
+			break;
+		case DmDlsArticulatorDestination_EG2_HOLD_TIME:
+			gen.genOper = kHoldModEnv;
+			gen.genAmount.shortAmount = con->scale >> 16;
 			break;
 		case DmDlsArticulatorDestination_EG1_SUSTAIN_LEVEL: {
-			// SF2 Spec:
-			//     This is the decrease in level, expressed in centibels, to which the Volume Envelope
-			//     value ramps during the decay phase. For the Volume Envelope, the sustain level is
-			//     best expressed in centibels of attenuation from full scale. A value of 0 indicates the
-			//     sustain level is full level; this implies a zero duration of decay phase regardless of
-			//     decay time. A positive value indicates a decay to the corresponding level. Values
-			//     less than zero are to be interpreted as zero; conventionally 1000 indicates full
-			//     attenuation. For example, a sustain level which corresponds to an absolute value
-			//     12dB below of peak would be 120.
-			//
-			// Thus, since the DLS value is in 0.1% steps and 100% indicates "no attenuation", we can simply
-			// convert the DLS value into percent and set the SF2 sustainVolEnv to `1000 * (1 - dls)`.
-			int16_t clamped = (int16_t) clamp_s32(con->scale, 0, 1000);
-
-			gen->genOper = kSustainVolEnv;
-			gen->genAmount.shortAmount = (tsf_s16) (1000.f * (1.f - (clamped / 1000.f)));
+			gen.genOper = kSustainVolEnv;
+			gen.genAmount.shortAmount = (tsf_s16) (1000 - clamp_s32(con->scale >> 16, 0, 1000));
 			break;
 		}
 		case DmDlsArticulatorDestination_EG2_SUSTAIN_LEVEL: {
-			// SF2 Spec:
-			//     This is the decrease in level, expressed in 0.1% units, to which the Modulation
-			//     Envelope value ramps during the decay phase. For the Modulation Envelope, the
-			//     sustain level is properly expressed in percent of full scale. Because the volume
-			//     envelope sustain level is expressed as an attenuation from full scale, the sustain level
-			//     is analogously expressed as a decrease from full scale. A value of 0 indicates the
-			//     sustain level is full level; this implies a zero duration of decay phase regardless of
-			//     decay time. A positive value indicates a decay to the corresponding level. Values
-			//     less than zero are to be interpreted as zero; values above 1000 are to be interpreted as
-			//     1000. For example, a sustain level which corresponds to an absolute value 40% of
-			//     peak would be 600.
-			//
-			// Thus, we just need to invert the DLS value.
-			int16_t clamped = (int16_t) clamp_s32(con->scale, 0, 1000);
-
-			gen->genOper = kSustainModEnv;
-			gen->genAmount.shortAmount = 1000 - clamped;
+			gen.genOper = kSustainModEnv;
+			gen.genAmount.shortAmount = (tsf_s16) (1000 - clamp_s32(con->scale >> 16, 0, 1000));
 			break;
 		}
 		case DmDlsArticulatorDestination_FILTER_CUTOFF:
-			// SF2 Spec:
-			//     This is the cutoff and resonant frequency of the lowpass filter in absolute cent units.
-			//     The lowpass filter is defined as a second order resonant pole pair whose pole
-			//     frequency in Hz is defined by the Initial Filter Cutoff parameter. When the cutoff
-			//     frequency exceeds 20kHz and the Q (resonance) of the filter is zero, the filter does
-			//     not affect the signal.
-			gen->genOper = kInitialFilterFc;
-			gen->genAmount.shortAmount = sf2SecondsToTimeCents(dlsTimeCentsToSeconds(con->scale));
+			gen.genOper = kInitialFilterFc;
+			gen.genAmount.shortAmount = con->scale >> 16;
+			break;
+		case DmDlsArticulatorDestination_FILTER_Q:
+			gen.genOper = kInitialFilterQ;
+			gen.genAmount.shortAmount = con->scale >> 16;
 			break;
 		case DmDlsArticulatorDestination_LFO_FREQUENCY:
-			// SF2 Spec:
-			//   This is the frequency, in absolute cents, of the Modulation LFO’s triangular period.
-			//   A value of zero indicates a frequency of 8.176 Hz. A negative value indicates a
-			//   frequency less than 8.176 Hz; a positive value a frequency greater than 8.176 Hz.
-			//   For example, a frequency of 10 mHz would be 1200log2(.01/8.176) = -11610.
-			gen->genOper = kFreqModLFO;
-			gen->genAmount.shortAmount = sf2HzToCents(dlsAbsolutePitchCentsToHz(con->scale));
+			gen.genOper = kFreqModLFO;
+			gen.genAmount.shortAmount = con->scale >> 16;
 			break;
 		case DmDlsArticulatorDestination_LFO_START_DELAY:
-			// SF2 Spec:
-			//     This is the delay time, in absolute timecents, from key on until the Modulation LFO
-			//     begins its upward ramp from zero value. A value of 0 indicates a 1 second delay. A
-			//     negative value indicates a delay less than one second and a positive value a delay
-			//     longer than one second. The most negative number (-32768) conventionally
-			//     indicates no delay. For example, a delay of 10 msec would be 1200log2(.01) = -7973.
-			gen->genOper = kDelayModLFO;
-			gen->genAmount.shortAmount = sf2SecondsToTimeCents(dlsTimeCentsToSeconds(con->scale));
+			gen.genOper = kDelayModLFO;
+			gen.genAmount.shortAmount = con->scale >> 16;
 			break;
-		case DmDlsArticulatorDestination_KEY_ON_VELOCITY:
-			// SF2 Spec:
-			//     This enumerator forces the MIDI velocity to effectively be interpreted as the value
-			//     given. This generator can only appear at the instrument level. Valid values are from
-			//     0 to 127.
-			gen->genOper = kVelocity;
-			gen->genAmount.wordAmount = con->scale;
+		case DmDlsArticulatorDestination_VIB_FREQUENCY:
+			gen.genOper = kFreqVibLFO;
+			gen.genAmount.shortAmount = con->scale >> 16;
 			break;
-		case DmDlsArticulatorDestination_EG1_RESERVED:
-			Dm_report(DmLogLevel_DEBUG, "DmSynth: Use of reserved articulator destination `CONN_DST_EG1_RESERVED`, ignoring!");
-			continue;
-		case DmDlsArticulatorDestination_EG2_RESERVED:
-			Dm_report(DmLogLevel_DEBUG, "DmSynth: Use of reserved articulator destination `CONN_DST_EG2_RESERVED`, ignoring!");
-			continue;
+		case DmDlsArticulatorDestination_VIB_START_DELAY:
+			gen.genOper = kDelayVibLFO;
+			gen.genAmount.shortAmount = con->scale >> 16;
+			break;
 		default:
-			Dm_report(DmLogLevel_WARN, "DmSynth: Unknown Instrument Generator: %d", con->destination);
+			Dm_report(DmLogLevel_DEBUG, "DmSynth: Unknown Instrument Generator: %d", con->destination);
 			continue;
 		}
 
-		count += 1;
+		SFGeneratorList_add(gens, gen);
 	}
+}
 
-	return count;
+static void DmSynth_insertModulators(SFModulatorList* mods, DmDlsArticulator* art) {
+	for (size_t k = 0; k < art->connection_count; ++k) {
+		struct DmDlsArticulatorConnection* con = &art->connections[k];
+		struct tsf_hydra_imod mod;
+
+		// Ignore scaled controlled source articulators because SF2 support none of those allowed in DLS
+		if (con->control != DmDlsArticulatorSource_NONE) {
+			Dm_report(DmLogLevel_DEBUG, "DmDls: File uses scaled controlled source articulators which SF2 does not support");
+			continue;
+		}
+
+		// Pitch (scaled connection block special case)
+		if (con->source == DmDlsArticulatorSource_NONE && con->destination == DmDlsArticulatorDestination_PITCH) {
+			mod.modSrcOper = kNone;
+			mod.modTransOper = 0;
+			mod.modDestOper = kFineTune;
+			mod.modAmount = -(con->scale >> 16);
+			mod.modAmtSrcOper = kNone;
+			SFModulatorList_add(mods, mod);
+			continue;
+		}
+
+		// TODO: For all of these, also convert the transforms, including bipolarity and inversion, to SF2.
+
+		// Vol EG Key to Decay
+		if (con->destination == DmDlsArticulatorDestination_EG1_DECAY_TIME &&
+		    con->source == DmDlsArticulatorSource_KEY_NUMBER) {
+			mod.modSrcOper = kNoteOnKey;
+			mod.modDestOper = kDecayVolEnv;
+			mod.modAmtSrcOper = 0;
+			mod.modTransOper = kLinear;
+			mod.modAmount = con->scale >> 16;
+			SFModulatorList_add(mods, mod);
+			continue;
+		}
+
+		// Mod EG Key to Decay
+		if (con->destination == DmDlsArticulatorDestination_EG2_DECAY_TIME &&
+		    con->source == DmDlsArticulatorSource_KEY_NUMBER) {
+			mod.modSrcOper = kNoteOnKey;
+			mod.modDestOper = kDecayModEnv;
+			mod.modAmtSrcOper = 0;
+			mod.modTransOper = kLinear;
+			mod.modAmount = con->scale >> 16;
+			SFModulatorList_add(mods, mod);
+			continue;
+		}
+
+		// Vol EG Velocity to Attack
+		if (con->destination == DmDlsArticulatorDestination_EG1_ATTACK_TIME &&
+		    con->source == DmDlsArticulatorSource_KEY_ON_VELOCITY) {
+			mod.modSrcOper = kNoteOnVelocity;
+			mod.modDestOper = kAttackVolEnv;
+			mod.modAmtSrcOper = 0;
+			mod.modTransOper = kLinear;
+			mod.modAmount = con->scale >> 16;
+			SFModulatorList_add(mods, mod);
+			continue;
+		}
+
+		// Mod EG Velocity to Attack
+		if (con->destination == DmDlsArticulatorDestination_EG2_ATTACK_TIME &&
+		    con->source == DmDlsArticulatorSource_KEY_ON_VELOCITY) {
+			mod.modSrcOper = kNoteOnVelocity;
+			mod.modDestOper = kAttackModEnv;
+			mod.modAmtSrcOper = 0;
+			mod.modTransOper = kLinear;
+			mod.modAmount = con->scale >> 16;
+			SFModulatorList_add(mods, mod);
+			continue;
+		}
+
+		// Vol EG Key to Hold
+		if (con->destination == DmDlsArticulatorDestination_EG1_HOLD_TIME &&
+		    con->source == DmDlsArticulatorSource_KEY_NUMBER) {
+			mod.modSrcOper = kNoteOnKey;
+			mod.modDestOper = kHoldVolEnv;
+			mod.modAmtSrcOper = 0;
+			mod.modTransOper = kLinear;
+			mod.modAmount = con->scale >> 16;
+			SFModulatorList_add(mods, mod);
+			continue;
+		}
+
+		// Mod EG Key to Hold
+		if (con->destination == DmDlsArticulatorDestination_EG2_HOLD_TIME &&
+		    con->source == DmDlsArticulatorSource_KEY_NUMBER) {
+			mod.modSrcOper = kNoteOnKey;
+			mod.modDestOper = kHoldModEnv;
+			mod.modAmtSrcOper = 0;
+			mod.modTransOper = kLinear;
+			mod.modAmount = con->scale >> 16;
+			SFModulatorList_add(mods, mod);
+			continue;
+		}
+
+		Dm_report(DmLogLevel_DEBUG,
+			   "DmDls: Unsupported scaled source connection block; source=%d, destination=%d",
+			   con->source,
+			   con->destination);
+	}
 }
 
 static DmResult
@@ -220,6 +350,8 @@ Dm_createHydraSamplesForDls(DmDls* dls, float** pcm, int32_t* pcm_len, struct ts
 		strncpy(sample_headers[i].sampleName, wav->info.inam, 19);
 
 		sample_headers[i].start = (uint32_t) sample_offset;
+		sample_headers[i].startLoop = (uint32_t) sample_offset;
+		sample_headers[i].endLoop = (uint32_t) sample_offset;
 		sample_headers[i].sampleRate = wav->samples_per_second;
 		sample_headers[i].sampleType = 1; // SFSampleLink::monoSample
 		sample_offset += DmDls_decodeSamples(wav, samples + sample_offset, sample_count - sample_offset);
@@ -264,50 +396,24 @@ static DmResult Dm_createHydraSkeleton(DmDls* dls, struct tsf_hydra* res) {
 	res->instNum = dls->instrument_count + 1; // One for the sentinel
 	res->insts = Dm_alloc(sizeof(struct tsf_hydra_inst) * res->instNum);
 
-	// 6. Count the number of instrument zones and generators required and allocate them
+	// 6. Count the number of instrument zones and allocate them
 	res->ibagNum = 1; // One for the sentinel
-	res->igenNum = 1; // One for the sentinel
-	res->shdrNum = 1; // One for the sentinel
 
 	for (size_t i = 0; i < dls->instrument_count; ++i) {
 		DmDlsInstrument* ins = &dls->instruments[i];
 
 		// -> We need one zone for each instrument region
 		res->ibagNum += ins->region_count;
-
-		// -> We need one sample for each instrument region
-		res->shdrNum += ins->region_count;
-
-		// -> We need 7 generators for the implicit 'kKeyRange', 'kVelRange', 'kAttackVolEnv',
-		//   'kInitialAttenuation', 'kSampleModes', 'kSampleID', 'kExclusiveClass' for each zone
-		res->igenNum += ins->region_count * 7;
-
-		// -> We need one generator for each instrument-level articulator connection
-		for (size_t a = 0; a < ins->articulator_count; ++a) {
-			res->igenNum += ins->articulators[a].connection_count * ins->region_count;
-		}
-
-		// -> We need one generator for each region-level articulator connection
-		for (size_t r = 0; r < ins->region_count; ++r) {
-			DmDlsRegion* reg = &ins->regions[r];
-
-			for (size_t a = 0; a < reg->articulator_count; ++a) {
-				res->igenNum += reg->articulators[a].connection_count;
-			}
-		}
 	}
 
 	res->ibags = Dm_alloc(sizeof(struct tsf_hydra_ibag) * res->ibagNum);
-	res->igens = Dm_alloc(sizeof(struct tsf_hydra_igen) * res->igenNum);
+
+	// 7. Calculate the number of sample headers required and allocate them
+	res->shdrNum = dls->wave_table_size + 1; // One for the sentinel
 	res->shdrs = Dm_alloc(sizeof(struct tsf_hydra_shdr) * res->shdrNum);
 
-	// 7. Count the number of instrument modulators required and allocate them
-	// -> We need one sentinel (modulators are not supported)
-	res->imodNum = 1; // One for the sentinel
-	res->imods = Dm_alloc(sizeof(struct tsf_hydra_imod) * res->imodNum);
-
 	bool ok =
-	    res->phdrs && res->pbags && res->pgens && res->pmods && res->insts && res->ibags && res->igens && res->imods;
+	    res->phdrs && res->pbags && res->pgens && res->pmods && res->insts && res->ibags && res->shdrNum;
 	return ok ? DmResult_SUCCESS : DmResult_MEMORY_EXHAUSTED;
 }
 
@@ -326,24 +432,25 @@ static DmResult Dm_createHydra(DmDls* dls, struct tsf_hydra* hydra, float** pcm,
 		return rv;
 	}
 
+	struct tsf_hydra_igen gen;
+	SFModulatorList imod;
+	SFModulatorList_init(&imod);
+
+	struct tsf_hydra_imod mod;
+	SFGeneratorList igen;
+	SFGeneratorList_init(&igen);
+
 	// Fill the hydra with useful data
 	uint32_t pgen_ndx = 0;
 	uint32_t pmod_ndx = 0;
 	uint32_t ibag_ndx = 0;
-	uint32_t igen_ndx = 0;
-	uint32_t imod_ndx = 0;
-	uint32_t shdr_ndx = 0;
 	for (size_t i = 0; i < dls->instrument_count; ++i) {
-		// TODO(lmichaelis): Dirty fix for drum kit problems. We add the instruments in reverse, so that TSF always
-		//                   behaves as-if instruments later in the sequence override previous instruments. This allows
-		//                   Gothic 2 to use drum kits as intended and prevents Gothic 1 from playing from the
-		//                   Metronom.dls file when it shouldn't. This works in conjunction with the channel selection
-		//                   from DmInstrument_getDlsInstrument.
-		DmDlsInstrument* ins = &dls->instruments[dls->instrument_count - 1 - i];
+		DmDlsInstrument* ins = &dls->instruments[i];
 		uint32_t bank = ins->bank;
 
 		strncpy(hydra->phdrs[i].presetName, ins->info.inam, 19);
-		hydra->phdrs[i].bank = bank;
+		// NOTE: Drum kits always go into MIDI Bank 128
+		hydra->phdrs[i].bank = bank & DmDls_DRUM_KIT ? 128 : bank;
 		hydra->phdrs[i].preset = ins->patch;
 		hydra->phdrs[i].genre = 0;
 		hydra->phdrs[i].morphology = 0;
@@ -363,80 +470,115 @@ static DmResult Dm_createHydra(DmDls* dls, struct tsf_hydra* hydra, float** pcm,
 		for (size_t r = 0; r < ins->region_count; ++r) {
 			DmDlsRegion* reg = &ins->regions[r];
 
-			hydra->ibags[ibag_ndx].instGenNdx = igen_ndx;
-			hydra->ibags[ibag_ndx].instModNdx = imod_ndx;
+			hydra->ibags[ibag_ndx].instGenNdx = igen.length;
+			hydra->ibags[ibag_ndx].instModNdx = imod.length;
 			ibag_ndx++;
 
-			hydra->igens[igen_ndx].genOper = kKeyRange;
-			hydra->igens[igen_ndx].genAmount.range.hi = (tsf_u8) reg->range_high;
-			hydra->igens[igen_ndx].genAmount.range.lo = (tsf_u8) reg->range_low;
-			igen_ndx++;
+			// Key Range Generator
+			gen.genOper = kKeyRange;
+			gen.genAmount.range.hi = (tsf_u8) reg->range_high;
+			gen.genAmount.range.lo = (tsf_u8) reg->range_low;
+			SFGeneratorList_add(&igen, gen);
 
-			hydra->igens[igen_ndx].genOper = kVelRange;
-			uint8_t vel_hi = reg->velocity_high;
-			uint8_t vel_lo = reg->velocity_low;
+			// Velocity Range Generator
+			gen.genOper = kVelRange;
+			gen.genAmount.range.hi = (tsf_u8) reg->velocity_high;
+			gen.genAmount.range.lo = (tsf_u8) reg->velocity_low;
 
-			if (vel_hi <= vel_lo) {
-				vel_hi = 127;
-				vel_lo = 0;
+			if (reg->velocity_high <= reg->velocity_low) {
+				gen.genAmount.range.hi = 127;
+				gen.genAmount.range.lo = 0;
+			}
+			SFGeneratorList_add(&igen, gen);
+
+			// Exclusive Class Generator
+			if (reg->key_group != 0) {
+				gen.genOper = kExclusiveClass;
+				gen.genAmount.wordAmount = reg->key_group;
+				SFGeneratorList_add(&igen, gen);
 			}
 
-			hydra->igens[igen_ndx].genAmount.range.hi = vel_hi;
-			hydra->igens[igen_ndx].genAmount.range.lo = vel_lo;
-			igen_ndx++;
+			// Overriding Root Key Generator
+			gen.genOper = kOverridingRootKey;
+			gen.genAmount.wordAmount = reg->sample.unity_note;
+			SFGeneratorList_add(&igen, gen);
 
-			hydra->igens[igen_ndx].genOper = kAttackVolEnv;
-			hydra->igens[igen_ndx].genAmount.shortAmount = sf2SecondsToTimeCents(0.1);
-			igen_ndx++;
+			// Fine Tune Generator
+			gen.genOper = kFineTune;
+			gen.genAmount.shortAmount = reg->sample.fine_tune >> 16;
+			SFGeneratorList_add(&igen, gen);
 
-			hydra->igens[igen_ndx].genOper = kInitialAttenuation;
-			hydra->igens[igen_ndx].genAmount.shortAmount = (tsf_s16) reg->sample.attenuation;
-			igen_ndx++;
+			// Initial Attenuation Generator
+			gen.genOper = kInitialAttenuation;
+			gen.genAmount.wordAmount = -(reg->sample.gain >> 16);
+			SFGeneratorList_add(&igen, gen);
+
+			// Sample Loops
+			uint16_t loop = 0;  // i.e. "no loop"
+			if (reg->sample.looping) {
+				uint16_t coarse = reg->sample.loop_start / 32768;
+				uint16_t fine = reg->sample.loop_start % 32768;
+
+				gen.genOper = kStartLoopOffset;
+				gen.genAmount.wordAmount = fine;
+				SFGeneratorList_add(&igen, gen);
+
+				gen.genOper = kStartLoopOffsetCoarse;
+				gen.genAmount.wordAmount = coarse;
+				SFGeneratorList_add(&igen, gen);
+
+				coarse = (reg->sample.loop_start + reg->sample.loop_length) / 32768;
+				fine = (reg->sample.loop_start + reg->sample.loop_length) % 32768;
+
+				gen.genOper = kEndLoopOffset;
+				gen.genAmount.wordAmount = fine;
+				SFGeneratorList_add(&igen, gen);
+
+				gen.genOper = kEndLoopOffsetCoarse;
+				gen.genAmount.wordAmount = coarse;
+				SFGeneratorList_add(&igen, gen);
+
+				loop = reg->sample.loop_with_release ? 3u : 1u;
+			}
+
+			gen.genOper = kSampleModes;
+			gen.genAmount.wordAmount = loop;
+			SFGeneratorList_add(&igen, gen);
 
 			// Articulators
-			for (size_t a = 0; a < ins->articulator_count; ++a) {
-				igen_ndx += DmSynth_insertGeneratorArticulators(hydra->igens + igen_ndx, &ins->articulators[a]);
-			}
-
-			for (size_t a = 0; a < reg->articulator_count; ++a) {
-				igen_ndx += DmSynth_insertGeneratorArticulators(hydra->igens + igen_ndx, &reg->articulators[a]);
-			}
-
-			hydra->igens[igen_ndx].genOper = kSampleModes;
-			hydra->igens[igen_ndx].genAmount.wordAmount = reg->sample.looping == true ? 1 : 0;
-			igen_ndx++;
-
-			hydra->igens[igen_ndx].genOper = kSampleID;
-			hydra->igens[igen_ndx].genAmount.wordAmount = shdr_ndx;
-			igen_ndx++;
-
-			hydra->igens[igen_ndx].genOper = kExclusiveClass;
-			hydra->igens[igen_ndx].genAmount.wordAmount = reg->key_group;
-			igen_ndx++;
-
-			// Additional sample configuration.
-			struct tsf_hydra_shdr* hdr = &hydra->shdrs[shdr_ndx];
-			*hdr = default_shdrs[reg->link_table_index];
-			shdr_ndx++;
-
-			if (reg->sample.looping) {
-				uint32_t offset = hdr->start;
-				hdr->startLoop = offset + reg->sample.loop_start;
-				hdr->endLoop = offset + reg->sample.loop_start + reg->sample.loop_length;
-
-				// NOTE: Fix for sound cutting off too early. When using TSF.
-				if (hdr->endLoop > hdr->end) {
-					hdr->endLoop = hdr->end;
+			if (reg->articulator_count == 0) {
+				// Add only instrument articulators
+				for (size_t a = 0; a < ins->articulator_count; ++a) {
+					DmSynth_insertGenerators(&igen, &ins->articulators[a]);
+					DmSynth_insertModulators(&imod, &ins->articulators[a]);
 				}
 			} else {
-				hdr->startLoop = 0;
-				hdr->endLoop = 0;
+				// Add only region articulators
+				for (size_t a = 0; a < reg->articulator_count; ++a) {
+					DmSynth_insertGenerators(&igen, &reg->articulators[a]);
+					DmSynth_insertModulators(&imod, &ins->articulators[a]);
+				}
 			}
 
-			hdr->originalPitch = (tsf_u8) reg->sample.unity_note;
-			hdr->pitchCorrection = (tsf_s8) reg->sample.fine_tune;
+
+			gen.genOper = kSampleID;
+			gen.genAmount.wordAmount = reg->link_table_index;
+			SFGeneratorList_add(&igen, gen);
 		}
 	}
+
+	// Sentinel Generator
+	gen.genOper = 0;
+	gen.genAmount.wordAmount = 0;
+	SFGeneratorList_add(&igen, gen);
+
+	// Sentinel Modulator
+	mod.modAmount = 0;
+	mod.modAmtSrcOper = 0;
+	mod.modDestOper = 0;
+	mod.modSrcOper = 0;
+	mod.modTransOper = 0;
+	SFModulatorList_add(&imod, mod);
 
 	// Populate the sentinel values of the hydra
 	strncpy(hydra->phdrs[hydra->phdrNum - 1].presetName, "EOP", 19);
@@ -459,22 +601,21 @@ static DmResult Dm_createHydra(DmDls* dls, struct tsf_hydra* hydra, float** pcm,
 	hydra->pmods[hydra->pmodNum - 1].modAmount = 0;
 	hydra->pmods[hydra->pmodNum - 1].modAmtSrcOper = 0;
 
+	hydra->igens = igen.data;
+	hydra->igenNum = igen.length;
+
+	hydra->imods = imod.data;
+	hydra->imodNum = imod.length;
+
 	strncpy(hydra->insts[hydra->instNum - 1].instName, "EOI", 19);
 	hydra->insts[hydra->instNum - 1].instBagNdx = hydra->ibagNum - 1;
 
 	hydra->ibags[hydra->ibagNum - 1].instGenNdx = hydra->igenNum - 1;
 	hydra->ibags[hydra->ibagNum - 1].instModNdx = hydra->imodNum - 1;
 
-	hydra->igens[hydra->igenNum - 1].genOper = 0;
-	hydra->igens[hydra->igenNum - 1].genAmount.shortAmount = 0;
+	hydra->shdrNum = default_shdrs_len;
+	hydra->shdrs = default_shdrs;
 
-	hydra->imods[hydra->imodNum - 1].modSrcOper = 0;
-	hydra->imods[hydra->imodNum - 1].modDestOper = 0;
-	hydra->imods[hydra->imodNum - 1].modTransOper = 0;
-	hydra->imods[hydra->imodNum - 1].modAmount = 0;
-	hydra->imods[hydra->imodNum - 1].modAmtSrcOper = 0;
-
-	Dm_free(default_shdrs);
 	return DmResult_SUCCESS;
 }
 

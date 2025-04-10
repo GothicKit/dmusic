@@ -3,23 +3,6 @@
 #pragma once
 #include "_Riff.h"
 
-typedef enum DmDlsRegionFlags {
-	DmDlsRegion_NONEXCLUSIVE = 1 << 0,
-} DmDlsRegionFlags;
-
-typedef enum DmDlsWaveSampleFlags {
-	DmDlsWave_NO_TRUNCATION = 0x11,
-	DmDlsWave_NO_COMPRESSION = 0x21,
-} DmDlsWaveSampleFlags;
-
-typedef enum DmDlsLoopType {
-	DmDlsLoop_FORWARD = 0,
-} DmDlsLoopType;
-
-typedef enum DmDlsWaveLinkFlags {
-	DmDlsWaveLink_MASTER_PHASE = 1 << 0,
-} DmDlsWaveLinkFlags;
-
 typedef enum DmDlsArticulatorSource {
 	DmDlsArticulatorSource_NONE = 0,
 	DmDlsArticulatorSource_LFO = 1,
@@ -81,10 +64,25 @@ typedef enum DmDlsArticulatorDestination {
 } DmDlsArticulatorDestination;
 
 typedef enum DmDlsArticulatorTransform {
-	DmDlsArticulatorTransform_NONE = 0,
+	DmDlsArticulatorTransform_LINEAR = 0,
 	DmDlsArticulatorTransform_CONCAVE = 1,
 	DmDlsArticulatorTransform_CONVEX = 2,
 	DmDlsArticulatorTransform_SWITCH = 3,
+
+	DmDlsArticulatorTransform_LINEAR_BIPOLAR = 0x10,
+	DmDlsArticulatorTransform_CONCAVE_BIPOLAR = 0x11,
+	DmDlsArticulatorTransform_CONVEX_BIPOLAR = 0x12,
+	DmDlsArticulatorTransform_SWITCH_BIPOLAR = 0x13,
+
+	DmDlsArticulatorTransform_LINEAR_INVERTED = 0x20,
+	DmDlsArticulatorTransform_CONCAVE_INVERTED = 0x21,
+	DmDlsArticulatorTransform_CONVEX_INVERTED = 0x22,
+	DmDlsArticulatorTransform_SWITCH_INVERTED = 0x23,
+
+	DmDlsArticulatorTransform_LINEAR_INVERTED_BIPOLAR = 0x30,
+	DmDlsArticulatorTransform_CONCAVE_INVERTED_BIPOLAR = 0x31,
+	DmDlsArticulatorTransform_CONVEX_INVERTED_BIPOLAR = 0x32,
+	DmDlsArticulatorTransform_SWITCH_INVERTED_BIPOLAR = 0x33,
 } DmDlsArticulatorTransform;
 
 enum {
@@ -96,11 +94,12 @@ enum {
 typedef struct DmDlsWaveSample {
 	uint16_t unity_note;
 	uint16_t fine_tune;
-	int32_t attenuation;
-	DmDlsWaveSampleFlags flags;
+	int32_t gain;
+	bool allow_truncation;
+	bool allow_compression;
 
 	bool looping;
-	DmDlsLoopType loop_type;
+	bool loop_with_release;
 	uint32_t loop_start;
 	uint32_t loop_length;
 } DmDlsWaveSample;
@@ -110,9 +109,11 @@ typedef struct DmDlsArticulator {
 	uint32_t connection_count;
 	struct DmDlsArticulatorConnection {
 		DmDlsArticulatorSource source;
-		uint16_t control;
+		DmDlsArticulatorSource control;
 		DmDlsArticulatorDestination destination;
-		DmDlsArticulatorTransform transform;
+		DmDlsArticulatorTransform output_transform;
+		DmDlsArticulatorTransform control_transform;
+		DmDlsArticulatorTransform source_transform;
 		int32_t scale;
 	}* connections;
 } DmDlsArticulator;
@@ -122,12 +123,14 @@ typedef struct DmDlsRegion {
 	uint16_t range_high;
 	uint16_t velocity_low;
 	uint16_t velocity_high;
-	DmDlsRegionFlags flags;
 	uint16_t key_group;
+	bool nonexclusive;
 
+	DmInfo info;
 	DmDlsWaveSample sample;
 
-	DmDlsWaveLinkFlags link_flags;
+	bool link_phase_master;
+	bool link_multi_channel;
 	uint16_t link_phase_group;
 	uint32_t link_channel;
 	uint32_t link_table_index;
@@ -168,7 +171,8 @@ typedef struct DmDlsWave {
 
 	// ADPCM only:
 	uint16_t samples_per_block;
-	uint16_t coefficient_table[14];
+	int16_t coefficient_table_0[7];
+	int16_t coefficient_table_1[7];
 
 	DmDlsWaveSample sample;
 

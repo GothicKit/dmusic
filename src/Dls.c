@@ -150,8 +150,6 @@ static int clamp_16bit(int v) {
 
 // TODO(lmichaelis): These are the 'built in' set of 7 predictor value pairs; additional values can be added
 //  				 to this table by including them as metadata chunks in the WAVE header
-static int ADPCM_ADAPT_COEFF1[7] = {256, 512, 0, 192, 240, 460, 392};
-static int ADPCM_ADAPT_COEFF2[7] = {0, -256, 0, 64, 0, -208, -232};
 static int16_t ADPCM_ADAPT_TABLE[16] = {230, 230, 230, 230, 307, 409, 512, 614, 768, 614, 512, 409, 307, 230, 230, 230};
 
 #define DmInt_read(src, tgt)                                                                                           \
@@ -159,7 +157,7 @@ static int16_t ADPCM_ADAPT_TABLE[16] = {230, 230, 230, 230, 307, 409, 512, 614, 
 	(src) += sizeof(*(tgt))
 
 // See https://wiki.multimedia.cx/index.php/Microsoft_ADPCM
-static uint8_t const* DmDls_decodeAdpcmBlock(uint8_t const* adpcm, float* pcm, uint32_t block_size) {
+static uint8_t const* DmDls_decodeAdpcmBlock(uint8_t const* adpcm, float* pcm, uint32_t block_size, int16_t const* coeff1, int16_t const* coeff2) {
 	uint8_t block_predictor;
 	DmInt_read(adpcm, &block_predictor);
 
@@ -176,8 +174,8 @@ static uint8_t const* DmDls_decodeAdpcmBlock(uint8_t const* adpcm, float* pcm, u
 	*pcm++ = (float) sample_b / (float) INT16_MAX;
 	*pcm++ = (float) sample_a / (float) INT16_MAX;
 
-	int coeff_1 = ADPCM_ADAPT_COEFF1[block_predictor];
-	int coeff_2 = ADPCM_ADAPT_COEFF2[block_predictor];
+	int coeff_1 = coeff1[block_predictor];
+	int coeff_2 = coeff2[block_predictor];
 
 	uint32_t remaining = block_size - 7 /* header */;
 	for (uint32_t i = 0; i < remaining; ++i) {
@@ -232,7 +230,7 @@ static size_t DmDls_decodeAdpcm(DmDlsWave const* slf, float* out, size_t len) {
 			break;
 		}
 
-		adpcm = DmDls_decodeAdpcmBlock(adpcm, out + offset, slf->block_align);
+		adpcm = DmDls_decodeAdpcmBlock(adpcm, out + offset, slf->block_align, slf->coefficient_table_0 , slf->coefficient_table_1);
 		offset += frames_per_block;
 	}
 

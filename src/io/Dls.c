@@ -2,19 +2,26 @@
 // SPDX-License-Identifier: MIT-Modern-Variant
 #include "_Internal.h"
 
+static int16_t ADPCM_ADAPT_COEFF1[7] = {256, 512, 0, 192, 240, 460, 392};
+static int16_t ADPCM_ADAPT_COEFF2[7] = {0, -256, 0, 64, 0, -208, -232};
+
 static void DmDls_parseWaveSample(DmDlsWaveSample* slf, DmRiff* rif) {
 	uint32_t size = 0;
 	DmRiff_readDword(rif, &size);
 	DmRiff_readWord(rif, &slf->unity_note);
 	DmRiff_readWord(rif, &slf->fine_tune);
-	DmRiff_readInt(rif, &slf->attenuation);
-	DmRiff_readDword(rif, &slf->flags);
+	DmRiff_readInt(rif, &slf->gain);
+
+	uint32_t flags;
+	DmRiff_readDword(rif, &flags);
+	slf->allow_truncation = (flags & 1) != 0;
+	slf->allow_compression = (flags & 2) != 0;
 
 	uint32_t sample_loops = 0;
 	DmRiff_readDword(rif, &sample_loops);
 
 	if (sample_loops > 1) {
-		Dm_report(DmLogLevel_ERROR, "DmDls: Wave sample reports more than 1 loop; ignoring excess");
+		Dm_report(DmLogLevel_DEBUG, "DmDls: Wave sample reports more than 1 loop; ignoring excess");
 		sample_loops = 1;
 	} else if (sample_loops == 0) {
 		slf->looping = false;
@@ -23,9 +30,42 @@ static void DmDls_parseWaveSample(DmDlsWaveSample* slf, DmRiff* rif) {
 
 	slf->looping = true;
 	DmRiff_readDword(rif, &size);
-	DmRiff_readDword(rif, &slf->loop_type);
+	DmRiff_readDword(rif, &flags);
 	DmRiff_readDword(rif, &slf->loop_start);
 	DmRiff_readDword(rif, &slf->loop_length);
+	slf->loop_with_release = flags == 1;
+}
+
+static DmDlsArticulatorTransform DmDls_convertArticulatorTransform(uint16_t transform, bool bipolar, bool inverted) {
+		switch (transform) {
+		case 0:
+			if (bipolar && inverted) return DmDlsArticulatorTransform_LINEAR_INVERTED_BIPOLAR;
+			if (bipolar) return DmDlsArticulatorTransform_LINEAR_BIPOLAR;
+			if (inverted) return DmDlsArticulatorTransform_LINEAR_INVERTED;
+			return DmDlsArticulatorTransform_LINEAR;
+		case 1:
+			if (bipolar && inverted) return DmDlsArticulatorTransform_CONCAVE_INVERTED_BIPOLAR;
+			if (bipolar) return DmDlsArticulatorTransform_CONCAVE_BIPOLAR;
+			if (inverted) return DmDlsArticulatorTransform_CONCAVE_INVERTED;
+			return DmDlsArticulatorTransform_CONCAVE;
+		case 2:
+			if (bipolar && inverted) return DmDlsArticulatorTransform_CONVEX_INVERTED_BIPOLAR;
+			if (bipolar) return DmDlsArticulatorTransform_CONVEX_BIPOLAR;
+			if (inverted) return DmDlsArticulatorTransform_CONVEX_INVERTED;
+			return DmDlsArticulatorTransform_CONVEX;
+		case 3:
+			if (bipolar && inverted) return DmDlsArticulatorTransform_SWITCH_INVERTED_BIPOLAR;
+			if (bipolar) return DmDlsArticulatorTransform_SWITCH_BIPOLAR;
+			if (inverted) return DmDlsArticulatorTransform_SWITCH_INVERTED;
+			return DmDlsArticulatorTransform_SWITCH;
+		default:
+			Dm_report(DmLogLevel_DEBUG,
+			       "DmDls: Unsupported articulator transform; type=%d bipolar=%s inverted=%s",
+			       transform,
+			       bipolar ? "yes" : "no",
+			       inverted ? "yes" : "no");
+			return DmDlsArticulatorTransform_LINEAR;
+		}
 }
 
 static DmResult DmDls_parseArticulator(DmDlsArticulator* slf, DmRiff* rif) {
@@ -35,6 +75,9 @@ static DmResult DmDls_parseArticulator(DmDlsArticulator* slf, DmRiff* rif) {
 	DmRiff_readDword(rif, &slf->connection_count);
 	slf->connections = Dm_alloc(slf->connection_count * sizeof(*slf->connections));
 	if (slf->connections == NULL) {
+		Dm_report(DmLogLevel_FATAL,
+		          "DmDls: Failed to allocate %d connection blocks for articulator",
+		          slf->connection_count);
 		return DmResult_MEMORY_EXHAUSTED;
 	}
 
@@ -43,13 +86,23 @@ static DmResult DmDls_parseArticulator(DmDlsArticulator* slf, DmRiff* rif) {
 		DmRiff_readWord(rif, &tmp);
 		slf->connections[i].source = tmp;
 
-		DmRiff_readWord(rif, &slf->connections[i].control);
+		DmRiff_readWord(rif, &tmp);
+		slf->connections[i].control = tmp;
 
 		DmRiff_readWord(rif, &tmp);
 		slf->connections[i].destination = tmp;
 
-		DmRiff_readWord(rif, &tmp);
-		slf->connections[i].transform = tmp;
+		if (slf->level == 1) {
+			DmRiff_readWord(rif, &tmp);
+			slf->connections[i].output_transform = DmDls_convertArticulatorTransform(tmp, false, false);
+			slf->connections[i].control_transform = DmDlsArticulatorTransform_LINEAR;
+			slf->connections[i].source_transform = slf->connections[i].output_transform;
+		} else /* DLS Level 2 */ {
+			DmRiff_readWord(rif, &tmp);
+			slf->connections[i].output_transform = DmDls_convertArticulatorTransform(tmp & 0xF, false, false);
+			slf->connections[i].control_transform = DmDls_convertArticulatorTransform(tmp >> 4 & 0xF, tmp >> 8 & 1, tmp >> 9 & 1);
+			slf->connections[i].source_transform = DmDls_convertArticulatorTransform(tmp >> 10 & 0xF, tmp >> 14 & 1, tmp >> 15 & 1);
+		}
 
 		DmRiff_readInt(rif, &slf->connections[i].scale);
 	}
@@ -61,7 +114,7 @@ static DmResult DmDls_parseArticulatorList(DmDlsArticulator* lst, DmRiff* rif, s
 	DmRiff cnk;
 	for (size_t i = 0; i < len; ++i) {
 		if (!DmRiff_readChunk(rif, &cnk)) {
-			return DmResult_FILE_CORRUPT;
+			continue;
 		}
 
 		bool level1 = DmRiff_is(&cnk, DM_FOURCC_ART1, 0);
@@ -95,15 +148,18 @@ static DmResult DmDls_parseRegion(DmDlsRegion* slf, DmRiff* rif) {
 
 			uint16_t options = 0;
 			DmRiff_readWord(&cnk, &options);
-			slf->flags = options;
+			slf->nonexclusive = options & 1;
 
 			DmRiff_readWord(&cnk, &slf->key_group);
 		} else if (DmRiff_is(&cnk, DM_FOURCC_WSMP, 0)) {
 			DmDls_parseWaveSample(&slf->sample, &cnk);
+		} else if (DmRiff_is(&cnk, DM_FOURCC_LIST, DM_FOURCC_INFO)) {
+			DmInfo_parse(&slf->info, &cnk);
 		} else if (DmRiff_is(&cnk, DM_FOURCC_WLNK, 0)) {
 			uint16_t options = 0;
 			DmRiff_readWord(&cnk, &options);
-			slf->link_flags = options;
+			slf->link_phase_master = options & 1;
+			slf->link_multi_channel = options & 2;
 
 			DmRiff_readWord(&cnk, &slf->link_phase_group);
 			DmRiff_readDword(&cnk, &slf->link_channel);
@@ -154,7 +210,7 @@ static DmResult DmDls_parseInstrumentRegionList(DmDlsInstrument* slf, DmRiff* ri
 			return DmResult_FILE_CORRUPT;
 		}
 
-		if (!DmRiff_is(&cnk, DM_FOURCC_LIST, DM_FOURCC_RGN_)) {
+		if (!DmRiff_is(&cnk, DM_FOURCC_LIST, DM_FOURCC_RGN_) && !DmRiff_is(&cnk, DM_FOURCC_LIST, DM_FOURCC_RGN2)) {
 			return DmResult_FILE_CORRUPT;
 		}
 
@@ -267,19 +323,22 @@ static void DmDls_parseWaveTableItemFormat(DmDlsWave* slf, DmRiff* rif) {
 		DmRiff_readWord(rif, &size);
 
 		if (size != 7) {
-			Dm_report(DmLogLevel_ERROR, "DmDls: Invalid ADPCM coefficient count: %d", size);
+			memcpy(slf->coefficient_table_0, ADPCM_ADAPT_COEFF1, sizeof ADPCM_ADAPT_COEFF1);
+			memcpy(slf->coefficient_table_1, ADPCM_ADAPT_COEFF2, sizeof ADPCM_ADAPT_COEFF2);
+			Dm_report(DmLogLevel_DEBUG, "DmDls: Invalid ADPCM coefficient count: %d", size);
 			return;
 		}
 
-		for (uint16_t i = 0; i < size * 2; ++i) {
-			DmRiff_readWord(rif, slf->coefficient_table + i);
+		for (uint16_t i = 0; i < size; ++i) {
+			DmRiff_readShort(rif, slf->coefficient_table_0 + i);
+			DmRiff_readShort(rif, slf->coefficient_table_1 + i);
 		}
 	} else {
 		Dm_report(DmLogLevel_ERROR, "DmDls: Unknown Wave Format: %d", slf->format);
 	}
 }
 
-static void DmDls_parseWaveTableItem(DmDlsWave* slf, DmRiff* rif) {
+static void DmDls_parseWavePoolItem(DmDlsWave* slf, DmRiff* rif) {
 	DmRiff cnk;
 	while (DmRiff_readChunk(rif, &cnk)) {
 		if (DmRiff_is(&cnk, DM_FOURCC_LIST, DM_FOURCC_INFO)) {
@@ -292,14 +351,24 @@ static void DmDls_parseWaveTableItem(DmDlsWave* slf, DmRiff* rif) {
 			cnk.pos = cnk.len;
 		} else if (DmRiff_is(&cnk, DM_FOURCC_WSMP, 0)) {
 			DmDls_parseWaveSample(&slf->sample, &cnk);
-		} else if (DmRiff_is(&cnk, DM_FOURCC_WAVH, 0)) {
-			continue; // TODO(lmichaelis): The purpose of the 'wavh'-chunk is unknown.
-		} else if (DmRiff_is(&cnk, DM_FOURCC_WAVU, 0)) {
-			continue; // TODO(lmichaelis): The purpose of the 'wavu'-chunk is unknown.
-		} else if (DmRiff_is(&cnk, DM_FOURCC_SMPL, 0)) {
-			continue; // TODO(lmichaelis): The purpose of the 'smpl'-chunk is unknown.
 		} else if (DmRiff_is(&cnk, DM_FOURCC_FMT_, 0)) {
 			DmDls_parseWaveTableItemFormat(slf, &cnk);
+		} else if (DmRiff_is(&cnk, DM_FOURCC_WAVH, 0)) {
+			continue; // Ignored.
+		} else if (DmRiff_is(&cnk, DM_FOURCC_WAVU, 0)) {
+			continue; // Ignored.
+		} else if (DmRiff_is(&cnk, DM_FOURCC_SMPL, 0)) {
+			continue; // Ignored.
+		} else if (DmRiff_is(&cnk, DM_FOURCC_WVST, 0)) {
+			continue; // Ignored.
+		} else if (DmRiff_is(&cnk, DM_FOURCC_CUE_, 0)) {
+			continue; // Ignored.
+		} else if (DmRiff_is(&cnk, DM_FOURCC_LIST, DM_FOURCC_ADTL)) {
+			continue; // Ignored.
+		} else if (DmRiff_is(&cnk, DM_FOURCC_PAD_, 0)) {
+			continue; // Ignored.
+		} else if (DmRiff_is(&cnk, DM_FOURCC_INST, 0)) {
+			continue; // Ignored.
 		}
 
 		DmRiff_reportDone(&cnk);
@@ -313,6 +382,7 @@ static DmResult DmDls_parsePoolTable(DmDls* slf, DmRiff* rif) {
 
 	slf->pool_table = Dm_alloc(slf->pool_table_size * sizeof(uint32_t));
 	if (slf->pool_table == NULL) {
+		Dm_report(DmLogLevel_FATAL, "Dls: Failed to allocate %d pool-table items", slf->pool_table_size);
 		return DmResult_MEMORY_EXHAUSTED;
 	}
 
@@ -320,6 +390,7 @@ static DmResult DmDls_parsePoolTable(DmDls* slf, DmRiff* rif) {
 		DmRiff_readDword(rif, slf->pool_table + i);
 	}
 
+	Dm_report(DmLogLevel_TRACE, "Dls: pool-table-size=%d", slf->pool_table_size);
 	return DmResult_SUCCESS;
 }
 
@@ -328,20 +399,23 @@ static DmResult DmDls_parseWaveTable(DmDls* slf, DmRiff* rif) {
 	slf->wave_table = Dm_alloc(slf->wave_table_size * sizeof(DmDlsWave));
 
 	if (slf->wave_table == NULL) {
+		Dm_report(DmLogLevel_FATAL, "Dls: Failed to allocate %d wave-pool items", slf->pool_table_size);
 		return DmResult_MEMORY_EXHAUSTED;
 	}
 
 	DmRiff cnk;
 	for (size_t i = 0; i < slf->wave_table_size; ++i) {
 		if (!DmRiff_readChunk(rif, &cnk)) {
-			return DmResult_FILE_CORRUPT;
+			Dm_report(DmLogLevel_DEBUG, "Dls: Expected wave-pool chunk, didn't get one");
+			continue;
 		}
 
 		if (!DmRiff_is(&cnk, DM_FOURCC_LIST, DM_FOURCC_WAVE)) {
-			return DmResult_FILE_CORRUPT;
+			Dm_report(DmLogLevel_DEBUG, "Dls: Expected wave-pool chunk to be of type 'wave'; got '%.4s'", &cnk.typ);
+			continue;
 		}
 
-		DmDls_parseWaveTableItem(&slf->wave_table[i], &cnk);
+		DmDls_parseWavePoolItem(&slf->wave_table[i], &cnk);
 		DmRiff_reportDone(&cnk);
 	}
 
@@ -352,6 +426,8 @@ DmResult DmDls_parse(DmDls* slf, void* buf, size_t len) {
 	DmRiff rif;
 	if (!DmRiff_init(&rif, buf, len)) {
 		Dm_free(buf);
+
+		Dm_report(DmLogLevel_FATAL, "Dls: File corrupted");
 		return DmResult_FILE_CORRUPT;
 	}
 
@@ -363,10 +439,35 @@ DmResult DmDls_parse(DmDls* slf, void* buf, size_t len) {
 
 		if (DmRiff_is(&cnk, DM_FOURCC_DLID, 0)) {
 			DmGuid_parse(&slf->guid, &cnk);
+			Dm_report(DmLogLevel_TRACE,
+			          "Dls: guid={%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-%02x%02x%02x%02x%02x%02x}",
+			          slf->guid.data[0],
+			          slf->guid.data[1],
+			          slf->guid.data[2],
+			          slf->guid.data[3],
+			          slf->guid.data[4],
+			          slf->guid.data[5],
+			          slf->guid.data[6],
+			          slf->guid.data[7],
+			          slf->guid.data[8],
+			          slf->guid.data[9],
+			          slf->guid.data[10],
+			          slf->guid.data[11],
+			          slf->guid.data[12],
+			          slf->guid.data[13],
+			          slf->guid.data[14],
+			          slf->guid.data[15]);
 		} else if (DmRiff_is(&cnk, DM_FOURCC_VERS, 0)) {
 			DmVersion_parse(&slf->version, &cnk);
+			Dm_report(DmLogLevel_TRACE,
+			          "Dls: version=%llu.%llu.%llu.%llu",
+			          slf->version.ms >> 16 & 0xFF,
+			          slf->version.ms & 0xFF,
+			          slf->version.ls >> 16 & 0xFF,
+			          slf->version.ls & 0xFF);
 		} else if (DmRiff_is(&cnk, DM_FOURCC_COLH, 0)) {
 			DmRiff_readDword(&cnk, &slf->instrument_count);
+			Dm_report(DmLogLevel_TRACE, "Dls: indicated-instrument-count=%llu", slf->instrument_count);
 		} else if (DmRiff_is(&cnk, DM_FOURCC_LIST, DM_FOURCC_INFO)) {
 			DmInfo_parse(&slf->info, &cnk);
 		} else if (DmRiff_is(&cnk, DM_FOURCC_PTBL, 0)) {
