@@ -556,7 +556,7 @@ static DmResult Dm_createHydra(DmDls* dls, struct tsf_hydra* hydra, float** pcm,
 				// Add only region articulators
 				for (size_t a = 0; a < reg->articulator_count; ++a) {
 					DmSynth_insertGenerators(&igen, &reg->articulators[a]);
-					DmSynth_insertModulators(&imod, &ins->articulators[a]);
+					DmSynth_insertModulators(&imod, &reg->articulators[a]);
 				}
 			}
 
