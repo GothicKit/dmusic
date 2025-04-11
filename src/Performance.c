@@ -721,6 +721,11 @@ static void DmPerformance_handleSegmentMessage(DmPerformance* slf, DmMessage_Seg
 	for (size_t i = 0; i < sgt->messages.length; ++i) {
 		DmMessage* m = &sgt->messages.data[i];
 
+		// Messages that begin at time -1 should be scheduled at the start of the performance
+		if (m->time == 0xffffffff) {
+			m->time = start;
+		}
+
 		// Messages occur before the indicated start offset or after the end offset are cut out.
 		if (m->time < start || m->time > end) {
 			continue;
