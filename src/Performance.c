@@ -667,7 +667,7 @@ static void DmPerformance_handleCommandMessage(DmPerformance* slf, DmMessage_Com
 		// Randomize the groove level
 		if (msg->groove_range != 0) {
 			int32_t new_groove = slf->groove + Dm_randRange(msg->groove_range);
-			slf->groove = max_s32(new_groove, 0);
+			slf->groove = clamp_s32(new_groove, 0, 100);
 		}
 	} else if (msg->command == DmCommand_END_AND_INTRO) {
 		Dm_report(DmLogLevel_WARN, "DmPerformance: Command message with command %d not implemented", msg->command);
