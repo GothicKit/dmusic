@@ -10,6 +10,8 @@
 #pragma once
 #include "dmusic.h"
 
+#ifndef _DM_USE_NATIVE_THREAD
+
 /* If you wish to use this with pthread-win32 (i.e. use the POSIX threads wrapper
  * instead of the native win32 API implementation of C11 threads), then just
  * define C11THREADS_PTHREAD_WIN32 before including this header file.
@@ -259,4 +261,8 @@ DMINT int _c11threads_win32_cnd_timedwait32(cnd_t* cond, mtx_t* mtx, const struc
 DMINT int _c11threads_win32_cnd_timedwait64(cnd_t* cond, mtx_t* mtx, const struct _c11threads_win32_timespec64_t* ts);
 
 /* ---- misc ---- */
+#endif
+
+#else
+#include <threads.h>
 #endif

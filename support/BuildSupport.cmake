@@ -1,3 +1,5 @@
+include(CheckCSourceCompiles)
+
 ## Compute the compile and link play_mode_flags for the current compiler.
 ##
 ## Args:
@@ -91,5 +93,27 @@ function(bs_internal_select_cflags_clang SANITIZERS COMPILE LINK)
     # return _INTERNAL_COMPILE_FLAGS, _INTERNAL_LINK_FLAGS;
     set(${COMPILE} ${_INTERNAL_COMPILE_FLAGS} PARENT_SCOPE)
     set(${LINK} ${_INTERNAL_LINK_FLAGS} PARENT_SCOPE)
+    return()
+endfunction()
+
+function(bs_check_native_threads _THREADS_AVAIL)
+    check_c_source_compiles("
+    #include <threads.h>
+    int main(int argc, char** argv) {
+        mtx_t lock;
+        if (mtx_init(&lock, mtx_recursive) != thrd_success) {
+            return -1;
+        }
+
+        if (mtx_lock(&lock) != thrd_success) {
+            return -2;
+        }
+
+        (void) mtx_unlock(&lock);
+        return 0;
+    }" _HAS_NATIVE_THREADS)
+
+    # return _HAS_NATIVE_THREADS
+    set(${_THREADS_AVAIL} ${_HAS_NATIVE_THREADS} PARENT_SCOPE)
     return()
 endfunction()

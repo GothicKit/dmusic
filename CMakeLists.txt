@@ -20,8 +20,6 @@ list(APPEND _DM_SOURCE
         src/io/Style.c
 
         src/thread/Thread.h
-        src/thread/Thread.Posix.c
-        src/thread/Thread.Win32.c
 
         src/_Dls.h
         src/_Internal.h
@@ -46,6 +44,18 @@ list(APPEND _DM_SOURCE
 include(support/BuildSupport.cmake)
 bs_select_cflags(${DM_ENABLE_ASAN} _DM_COMPILE_FLAGS _DM_LINK_FLAGS)
 
+
+bs_check_native_threads(_DM_HAS_NATIVE_THREADS)
+if (_DM_HAS_NATIVE_THREADS)
+    message(STATUS "dmusic: Building with native C11 threads support")
+else ()
+    message(STATUS "dmusic: Using C11 threads shim")
+    list(APPEND _DM_SOURCE
+            src/thread/Thread.Posix.c
+            src/thread/Thread.Win32.c
+    )
+endif ()
+
 if (${DM_BUILD_STATIC})
     add_library(dmusic STATIC)
     target_compile_definitions(dmusic PUBLIC DM_STATIC=1)
@@ -60,6 +70,10 @@ target_compile_definitions(dmusic PRIVATE DM_BUILD=1)
 target_compile_options(dmusic PRIVATE ${_DM_COMPILE_FLAGS})
 target_link_options(dmusic PRIVATE ${_DM_LINK_FLAGS})
 target_link_libraries(dmusic PRIVATE dmusic-tsf)
+
+if (_DM_HAS_NATIVE_THREADS)
+    target_compile_definitions(dmusic PRIVATE _DM_USE_NATIVE_THREAD=1)
+endif ()
 
 if (MINGW)
     target_compile_definitions(dmusic PRIVATE _POSIX_C_SOURCE=1)
