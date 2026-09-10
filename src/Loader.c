@@ -9,7 +9,7 @@ DmResult DmLoader_create(DmLoader** slf, DmLoaderOptions opt) {
 		return DmResult_INVALID_ARGUMENT;
 	}
 
-	DmLoader* new = *slf = Dm_alloc(sizeof *new);
+	DmLoader* new = Dm_alloc(sizeof *new);
 
 	if (new == NULL) {
 		return DmResult_MEMORY_EXHAUSTED;
@@ -27,6 +27,7 @@ DmResult DmLoader_create(DmLoader** slf, DmLoaderOptions opt) {
 	DmStyleCache_init(&new->style_cache);
 	DmDlsCache_init(&new->dls_cache);
 
+	*slf = new;
 	return DmResult_SUCCESS;
 }
 
