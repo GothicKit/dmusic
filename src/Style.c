@@ -103,6 +103,13 @@ static uint32_t Dm_toEmbellishmentFlagset(DmCommandType cmd) {
 
 // See: https://documentation.help/DirectMusic/howmusicvariesduringplayback.htm
 DmPattern* DmStyle_getRandomPattern(DmStyle* slf, uint32_t groove, DmCommandType cmd) {
+	// A NULL style has no patterns; the caller plays silence. A segment without a
+	// style track (wave-based ones, or ones carrying only chord and band tracks)
+	// otherwise crashes the process here on the first rendered command message.
+	if (slf == NULL) {
+		return NULL;
+	}
+
 	uint32_t embellishment = Dm_toEmbellishmentFlagset(cmd);
 
 	// Select a random pattern according to the current groove level.

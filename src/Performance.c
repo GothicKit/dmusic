@@ -590,7 +590,11 @@ static DmResult DmPattern_generateMessages(DmPattern* slf,
 		}
 
 		uint32_t variation_id = (uint32_t) variation[pref->variation_lock_id];
-		variation_id = 1 << (variation_id % DmPart_getValidVariationCount(part));
+		// A part whose variation choices are all zero has no slot to reduce the random
+		// index into (older DirectMusic Producer saves, e.g. Gothic's styles, ship them
+		// zeroed); playing every variation of the part beats dividing by zero here.
+		uint32_t variation_choices = DmPart_getValidVariationCount(part);
+		variation_id = variation_choices == 0 ? 0xFFFFFFFFu : 1u << (variation_id % variation_choices);
 
 		// Now we need to select the correct sub-chord to use for the pattern
 		// by comparing against the sub-chord level of the pattern. By default,
@@ -673,7 +677,9 @@ static void DmPerformance_handleCommandMessage(DmPerformance* slf, DmMessage_Com
 		Dm_report(DmLogLevel_WARN, "DmPerformance: Command message with command %d not implemented", msg->command);
 	}
 
-	DmPattern* pttn = DmStyle_getRandomPattern(slf->style, slf->groove, msg->command);
+	// A segment without a style track leaves slf->style NULL; play silence instead
+	// of crashing on the pattern lookup (wave-based segments hit this on every render).
+	DmPattern* pttn = slf->style == NULL ? NULL : DmStyle_getRandomPattern(slf->style, slf->groove, msg->command);
 	if (pttn == NULL) {
 		Dm_report(DmLogLevel_INFO, "DmPerformance: No suitable pattern found. Silence ensues ...", msg->command);
 		return;
