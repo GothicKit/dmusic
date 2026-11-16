@@ -156,6 +156,7 @@ typedef struct DmDlsInstrument {
 typedef enum DmDlsWaveFormat {
 	DmDlsWaveFormat_PCM = 1,
 	DmDlsWaveFormat_ADPCM = 2,
+	DmDlsWaveFormat_IMA_ADPCM = 17,
 } DmDlsWaveFormat;
 
 typedef struct DmDlsWave {

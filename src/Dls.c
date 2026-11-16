@@ -237,12 +237,102 @@ static size_t DmDls_decodeAdpcm(DmDlsWave const* slf, float* out, size_t len) {
 	return offset;
 }
 
+// See https://wiki.multimedia.cx/index.php/IMA_ADPCM
+static int16_t const IMA_STEP_TABLE[89] = {
+	7, 8, 9, 10, 11, 12, 13, 14, 16, 17,
+	19, 21, 23, 25, 28, 31, 34, 37, 41, 45,
+	50, 55, 60, 66, 73, 80, 88, 97, 107, 118,
+	130, 143, 157, 173, 190, 209, 229, 252, 277, 304,
+	334, 368, 405, 446, 490, 538, 591, 650, 715, 786,
+	864, 950, 1045, 1149, 1264, 1390, 1529, 1681, 1849, 2033,
+	2236, 2459, 2705, 2975, 3272, 3599, 3959, 4355, 4790, 5269,
+	5795, 6375, 7012, 7713, 8484, 9332, 10265, 11292, 12421, 13663,
+	15029, 16532, 18185, 20003, 22003, 24203, 26623, 29286, 32215,
+};
+
+static int8_t const IMA_INDEX_TABLE[16] = {-1, -1, -1, -1, 2, 4, 6, 8, -1, -1, -1, -1, 2, 4, 6, 8};
+
+static uint8_t const* DmDls_decodeImaBlock(uint8_t const* adpcm, float* pcm, uint32_t samples_per_block) {
+	int16_t predictor;
+	DmInt_read(adpcm, &predictor);
+
+	uint8_t step_index;
+	DmInt_read(adpcm, &step_index);
+
+	// One reserved byte sits between the header and the packed nibbles.
+	adpcm += 1;
+
+	if (step_index > 88) {
+		step_index = 88;
+	}
+	int step = IMA_STEP_TABLE[step_index];
+
+	*pcm++ = (float) predictor / (float) INT16_MAX;
+
+	uint32_t remaining = samples_per_block - 1 /* the header predictor is sample 0 */;
+	for (uint32_t i = 0; i < remaining; ++i) {
+		uint8_t byte = adpcm[i / 2];
+		uint8_t nibble = (i % 2 == 0) ? (byte & 0x0F) : ((byte >> 4) & 0x0F);
+
+		int delta = step >> 3;
+		if (nibble & 4) delta += step;
+		if (nibble & 2) delta += step >> 1;
+		if (nibble & 1) delta += step >> 2;
+		if (nibble & 8) delta = -delta;
+
+		predictor = clamp_16bit(predictor + delta);
+		*pcm++ = (float) predictor / (float) INT16_MAX;
+
+		step_index = (uint8_t) clamp_s32(step_index + IMA_INDEX_TABLE[nibble], 0, 88);
+		step = IMA_STEP_TABLE[step_index];
+	}
+
+	return adpcm + (remaining + 1) / 2;
+}
+
+static size_t DmDls_decodeIma(DmDlsWave const* slf, float* out, size_t len) {
+	if (slf->channels != 1) {
+		Dm_report(DmLogLevel_ERROR,
+		          "DmDls: Attempted to decode IMA ADPCM with %d channels; only mono is supported!",
+		          slf->channels);
+		return 0;
+	}
+
+	uint32_t block_count = slf->pcm_size / slf->block_align;
+	uint32_t frames_per_block = slf->samples_per_block;
+	if (frames_per_block == 0) {
+		// A DLS whose fmt chunk did not carry the samples-per-block extension: the
+		// standard mono IMA block holds (blockAlign - 4) packed bytes = one sample
+		// per nibble, plus the header's first sample.
+		frames_per_block = (slf->block_align - 4) * 2 + 1;
+	}
+
+	if (out == NULL || len == 0) {
+		return (size_t) block_count * frames_per_block;
+	}
+
+	uint8_t const* adpcm = slf->pcm;
+	size_t offset = 0;
+	for (size_t i = 0; i < block_count; ++i) {
+		if (len < offset + frames_per_block) {
+			break;
+		}
+
+		adpcm = DmDls_decodeImaBlock(adpcm, out + offset, frames_per_block);
+		offset += frames_per_block;
+	}
+
+	return offset;
+}
+
 size_t DmDls_decodeSamples(DmDlsWave const* slf, float* out, size_t len) {
 	switch (slf->format) {
 	case DmDlsWaveFormat_PCM:
 		return DmDlsWave_decodeShort(slf, out, len);
 	case DmDlsWaveFormat_ADPCM:
 		return DmDls_decodeAdpcm(slf, out, len);
+	case DmDlsWaveFormat_IMA_ADPCM:
+		return DmDls_decodeIma(slf, out, len);
 	default:
 		return 0;
 	}
