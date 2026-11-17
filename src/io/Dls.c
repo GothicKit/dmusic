@@ -315,12 +315,26 @@ static void DmDls_parseWaveTableItemFormat(DmDlsWave* slf, DmRiff* rif) {
 	if (slf->format == DmDlsWaveFormat_PCM) {
 		DmRiff_readWord(rif, &slf->bits_per_sample);
 		DmRiff_read(rif, &tmp, 2); // Padding
-	} else if (slf->format == DmDlsWaveFormat_ADPCM) {
+	} else if (slf->format == DmDlsWaveFormat_ADPCM || slf->format == DmDlsWaveFormat_IMA_ADPCM) {
+		// Both ADPCM flavours may carry the fmt extension fields (cbSize, samples per
+		// block, coefficient count) — MS-ADPCM DLS files do, plain WAVEFORMATEX-sized
+		// IMA DLS files often do not. Read what the chunk actually holds.
 		uint16_t size = 0;
 		DmRiff_readWord(rif, &slf->bits_per_sample);
+		if (rif->len - rif->pos >= 2) {
+			DmRiff_readWord(rif, &size);
+		}
+		if (rif->len - rif->pos >= 2) {
+			DmRiff_readWord(rif, &slf->samples_per_block);
+		}
+		if (rif->len - rif->pos < 2) {
+			return;
+		}
 		DmRiff_readWord(rif, &size);
-		DmRiff_readWord(rif, &slf->samples_per_block);
-		DmRiff_readWord(rif, &size);
+
+		if (slf->format == DmDlsWaveFormat_IMA_ADPCM) {
+			return;
+		}
 
 		if (size != 7) {
 			memcpy(slf->coefficient_table_0, ADPCM_ADAPT_COEFF1, sizeof ADPCM_ADAPT_COEFF1);
