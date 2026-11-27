@@ -101,6 +101,24 @@ static uint32_t Dm_toEmbellishmentFlagset(DmCommandType cmd) {
 	return f;
 }
 
+// A pattern plays nothing when every part it references is missing from the style or
+// carries no notes. Gothic 2 ships such patterns; the DirectX SDK's own styles are the
+// opposite case, one-measure groove patterns that DO carry notes and must play.
+static bool DmPattern_hasNotes(DmStyle* slf, DmPattern* pttn) {
+	if (pttn == NULL) {
+		return false;
+	}
+
+	for (size_t i = 0; i < pttn->parts.length; ++i) {
+		DmPart* part = DmStyle_findPart(slf, &pttn->parts.data[i]);
+		if (part != NULL && part->note_count > 0) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
 // See: https://documentation.help/DirectMusic/howmusicvariesduringplayback.htm
 DmPattern* DmStyle_getRandomPattern(DmStyle* slf, uint32_t groove, DmCommandType cmd) {
 	uint32_t embellishment = Dm_toEmbellishmentFlagset(cmd);
@@ -126,9 +144,11 @@ DmPattern* DmStyle_getRandomPattern(DmStyle* slf, uint32_t groove, DmCommandType
 				continue;
 			}
 
-			// Fix for Gothic 2 in which some patterns are empty but have a groove range of 1-100 with no embellishment
-			// set.
-			if (pttn->embellishment == DmCommand_GROOVE && pttn->length_measures == 1) {
+			// Fix for Gothic 2 in which some patterns are empty but have a groove range of 1-100
+			// with no embellishment set. Skip a pattern only when it really plays nothing; the
+			// original fix skipped every one-measure groove pattern, which is most of the
+			// DirectX SDK's own sample styles.
+			if (!DmPattern_hasNotes(slf, pttn)) {
 				continue;
 			}
 

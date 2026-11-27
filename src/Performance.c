@@ -741,8 +741,12 @@ static void DmPerformance_handleSegmentMessage(DmPerformance* slf, DmMessage_Seg
 		}
 	}
 
-	// If we don't yet have a command, add it!
+	// If we don't yet have a command, add it! The message is zeroed: its groove_range
+	// (and the rest of the struct) is otherwise uninitialized stack memory, and a
+	// garbage range randomizes the groove level to wherever the stack points - which
+	// matches no pattern and silences segments whose real commands are still ahead.
 	DmMessage cmd;
+	memset(&cmd, 0, sizeof cmd);
 	cmd.type = DmMessage_COMMAND;
 	cmd.time = 0;
 	cmd.command.command = DmCommand_GROOVE;
@@ -785,6 +789,14 @@ static void DmPerformance_handleMessage(DmPerformance* slf, DmMessage* msg) {
 		DmStyle_release(slf->style);
 		slf->style = DmStyle_retain(msg->style.style);
 		slf->time_signature = slf->style->time_signature;
+
+		// A style carries the band its instruments come from; apply it so the channels
+		// it names play. The segment's own band track (applied by its message, which
+		// queues after the style's) overrides the channels it names; everything else
+		// keeps the style's instruments.
+		for (size_t i = 0; i < msg->style.style->bands.length; ++i) {
+			DmSynth_sendBandUpdate(&slf->synth, msg->style.style->bands.data[i]);
+		}
 		break;
 	case DmMessage_BAND:
 		Dm_report(DmLogLevel_TRACE,

@@ -91,8 +91,12 @@ DmResult DmBand_download(DmBand* slf, DmLoader* loader) {
 		}
 
 		// If the patch is not valid, this instrument cannot be played since we don't know
-		// where to find it in the DLS collection.
-		if (!(instrument->options & (DmInstrument_VALID_PATCH | DmInstrument_VALID_BANKSELECT))) {
+		// where to find it in the DLS collection. An instrument flagged for a predefined
+		// collection (General MIDI, Roland GS, Yamaha XG) is the exception: its patch
+		// member is that collection's implicit bank/patch (0 with the flag set is piano,
+		// not "unknown"), which styles ship without the valid-patch bits.
+		if (!(instrument->options & (DmInstrument_VALID_PATCH | DmInstrument_VALID_BANKSELECT)) &&
+		    !(instrument->options & DmInstrument_PREDEFINED_COLLECTION)) {
 			Dm_report(DmLogLevel_DEBUG,
 			          "DmBand: Not downloading instrument '%s' without valid patch",
 			          instrument->reference.name);
@@ -133,7 +137,11 @@ DmResult DmBand_download(DmBand* slf, DmLoader* loader) {
 		          slf->info.unam);
 	}
 
-	return rv;
+	// A single instrument whose collection cannot be resolved (e.g. segments authored
+	// for the General MIDI collection that carry no .dls reference of their own)
+	// is skipped by design above and leaves its channel unassigned; it must not fail the
+	// download of the whole band, which DmSegment_download would abort on.
+	return DmResult_SUCCESS;
 }
 
 void DmInstrument_free(DmInstrument* slf) {
